@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1100" width="800" height="1100">
+<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8b5cff"/><stop offset="1" stop-color="#ff2bd6"/></linearGradient></defs>
+<rect width="800" height="1100" fill="url(#g)"/>
+<circle cx="400" cy="450" r="260" fill="#000" opacity=".25"/>
+<text x="400" y="520" text-anchor="middle" font-size="260">📺</text>
+<text x="400" y="900" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="80" font-weight="900" fill="#fff">ПОСТЕР 2</text>
+<text x="400" y="980" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" fill="#fff" opacity=".8">ПЛЕЙСХОЛДЕР</text>
+</svg>

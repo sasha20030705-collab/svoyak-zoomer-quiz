@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Своя игра — экран</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Manrope:wght@600;700;800&family=Rubik+Mono+One&family=Unbounded:wght@700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/screen.css">
+</head>
+<body class="idle">
+  <!-- живой фон -->
+  <div id="bg" aria-hidden="true">
+    <div class="shape s1"></div><div class="shape s2"></div><div class="shape s3"></div><div class="shape s4"></div>
+  </div>
+
+  <!-- фильтры для RGB-сдвига в «слиянии звёзд» -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <filter id="fx-r" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter>
+    <filter id="fx-c" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0"/></filter>
+  </svg>
+
+  <div id="stage">
+    <div id="shell">
+      <div id="views"></div>
+      <div id="scorebar" class="hidden"></div>
+    </div>
+    <div class="ticker" id="ticker-top"><div class="track"></div></div>
+    <div class="ticker" id="ticker-bottom"><div class="track"></div></div>
+    <div id="flash"></div>
+    <div id="buzz"></div>
+    <canvas id="confetti" width="1920" height="1080"></canvas>
+  </div>
+
+  <div id="grain" aria-hidden="true"></div>
+
+  <div id="hud">
+    <button id="btn-mute" title="Звук (вкл/выкл)">🔊</button>
+    <button id="btn-fs" title="Полный экран (F)">⛶</button>
+  </div>
+  <div id="sound-hint">кликни или нажми любую клавишу — включим звук · F — на весь экран</div>
+
+  <script src="js/state.js"></script>
+  <script src="js/loader.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/confetti.js"></script>
+  <script src="js/screen.js"></script>
+</body>
+</html>

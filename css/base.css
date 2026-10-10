@@ -1,0 +1,38 @@
+/* Общие токены: кислотный лайм, горячий розовый, электрик-синий, оранжевый + чёрный и белый. */
+:root {
+  --lime: #C6FF00;
+  --pink: #FF2E93;
+  --blue: #2B4BFF;
+  --orange: #FF6A00;
+  --yellow: #FFE600;
+  --black: #0A0A0A;
+  --white: #FFFFFF;
+  --paper: #F4F1E8;
+  --red: #FF2E2E;
+
+  --bg: var(--blue);
+  --ink: var(--black);
+
+  --line: 4px solid var(--black);
+  --hard: 8px 8px 0 var(--black);
+  --hard-sm: 5px 5px 0 var(--black);
+  --ease-pop: cubic-bezier(.34, 1.56, .64, 1);
+
+  --font-display: "Dela Gothic One", "Unbounded", Impact, "Arial Black", sans-serif;
+  --font-head: "Unbounded", "Arial Black", Impact, sans-serif;
+  --font-mono: "Rubik Mono One", "Unbounded", "Courier New", monospace;
+  --font-body: "Manrope", "Unbounded", "Helvetica Neue", Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+.emoji-font { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }

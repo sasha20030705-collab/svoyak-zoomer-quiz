@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Своя игра — пульт</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Manrope:wght@600;700;800&family=Rubik+Mono+One&family=Unbounded:wght@700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/host.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="logo">СВОЯК<small>пульт</small></div>
+    <button class="btn lime" data-act="openScreen" title="Открыть экран для гостей">📺 Экран</button>
+    <button class="btn" data-act="undo" id="undo-top" title="Отменить последнее начисление (Ctrl+Z)">↶ Undo</button>
+  </header>
+  <div id="banners"></div>
+  <div class="layout">
+    <main class="main" id="main"></main>
+    <aside class="side" id="side"></aside>
+  </div>
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="js/state.js"></script>
+  <script src="js/loader.js"></script>
+  <script src="js/host.js"></script>
+</body>
+</html>

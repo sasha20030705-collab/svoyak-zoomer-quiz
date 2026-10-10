@@ -432,3 +432,40 @@ body.idle #hud { opacity: 0; }
 @media (prefers-reduced-motion: reduce) {
   #grain, .shape, #bg::before, .ticker .track, .cell { animation: none !important; }
 }
+
+/* ---------- вход с телефона: QR-карточка ---------- */
+.join-card { position: absolute; z-index: 4; display: flex; flex-direction: column; align-items: center; gap: 12px;
+  background: var(--white); border: var(--line); border-radius: 18px; box-shadow: 12px 12px 0 var(--black); padding: 26px 26px 22px; }
+.splash .join-card { right: 90px; top: 50%; margin-top: -330px; transform: rotate(2deg); width: 430px; animation: slap .7s .4s var(--ease-pop) both; --r: 2deg; }
+.join-card .jc-head { font-size: 24px; transform: rotate(-3deg); margin-top: -46px; }
+.join-card .jc-qr { width: 330px; height: 330px; image-rendering: pixelated; border: 4px solid var(--black); border-radius: 8px; }
+.join-card .jc-code { font: 400 84px/1 var(--font-display); letter-spacing: .08em; }
+.join-card .jc-url { font: 700 17px var(--font-body); color: #444; text-align: center; word-break: break-all; }
+.join-card .jc-dev { font-size: 22px; }
+.splash.with-qr .center { transform: translateX(-250px); }
+.splash.with-qr .center .mega { font-size: min(var(--mega), 250px); }
+.splash.with-qr .r-side { display: none; }
+.join-card.mini { position: relative; flex-direction: row; gap: 12px; padding: 8px 14px 8px 8px; border-radius: 12px; box-shadow: 6px 6px 0 var(--black); transform: rotate(2deg); margin-left: auto; }
+.join-card.mini .jc-qr { width: 76px; height: 76px; border-width: 3px; }
+.join-card.mini .jc-code { font-size: 32px; }
+.join-card.mini .jc-dev { font: 800 15px var(--font-head); }
+.board.with-qr .logo { display: none; }
+
+/* ---------- большой отсчёт последних 5 секунд ---------- */
+#countdown { position: absolute; inset: 0; z-index: 83; display: none; place-items: center; pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 46, 46, .18) 0%, rgba(90, 0, 12, .62) 75%); }
+#countdown.on { display: grid; animation: cd-bg .5s ease-out both; }
+@keyframes cd-bg { from { opacity: 0; } }
+#countdown .cd-num { color: var(--white); -webkit-text-stroke: 10px var(--black); text-shadow: 16px 16px 0 var(--black), 28px 28px 0 var(--red);
+  animation: cd-slap .45s var(--ease-pop) both, cd-pulse .5s .45s ease-in-out infinite alternate, cd-blink .25s .7s steps(2) 2; }
+@keyframes cd-slap { 0% { transform: scale(2.6) rotate(-14deg); opacity: 0; } 100% { transform: scale(1) rotate(-4deg); opacity: 1; } }
+@keyframes cd-pulse { from { transform: scale(1) rotate(-4deg); } to { transform: scale(1.1) rotate(3deg); } }
+@keyframes cd-blink { 50% { color: var(--red); } }
+
+/* аватары команд (вместо эмодзи) */
+.av-img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit; }
+.team .ava, .pcol .ava, .chip .e { overflow: hidden; }
+.pcol .ava .av-img { border-radius: 18px; }
+.pcol .ava { overflow: visible; }
+.pcol .ava .av-img { position: absolute; inset: 0; }
+#buzz .e.has-av { width: 260px; height: 260px; border: 6px solid var(--black); border-radius: 18%; overflow: hidden; background: var(--white); box-shadow: 14px 14px 0 var(--black); transform: rotate(-5deg); filter: none; }

@@ -40,8 +40,10 @@
 
   const teamVars = (t) => `--tc:${t.color};--tx:${U.textOn(t.color)}`;
   const teamById = (s, id) => s.teams.find((t) => t.id === id);
+  /** Аватар команды (нарисованный/загруженный) или эмодзи. */
+  const avaInner = (t) => (t.avatar ? `<img class="av-img" src="${t.avatar}" alt="">` : esc(t.emoji));
   const chip = (t, extra = '', tail = '') =>
-    `<span class="chip ${extra}" style="${teamVars(t)}"><span class="e emoji-font">${esc(t.emoji)}</span>${esc(t.name)}${tail}</span>`;
+    `<span class="chip ${extra}" style="${teamVars(t)}"><span class="e emoji-font">${avaInner(t)}</span>${esc(t.name)}${tail}</span>`;
 
   /** Разбивка строки на графемы (🧛‍♂️ — один символ). */
   function graphemes(str) {
@@ -104,7 +106,7 @@
 
   /* ---------- бегущие строки ---------- */
   const TICKERS = {
-    splash: ['кто тут самый умный', 'не кринж, а квиз', 'др 21.10', 'без гугла', 'телефоны в карман'],
+    splash: ['кто тут самый умный', 'не кринж, а квиз', 'др 21.10', 'без гугла', 'сканируй qr — жми с телефона'],
     board: ['ваш ход, ребята', 'выбирайте, не тяните', 'дорого — значит сложно', 'аура на кону'],
     question: ['жми, если знаешь', 'думаем', 'тик-так', 'без гугла', 'шёпотом не подсказываем'],
     finalintro: ['финалочка', 'ставки сделаны?', 'всё или ничего'],
@@ -138,16 +140,37 @@
     return i > 0 ? { main: t.slice(0, i).trim(), sub: t.slice(i + 1).trim() } : { main: t, sub: '' };
   }
 
+  /** Блок «залетай с телефона»: QR, код комнаты, число подключённых телефонов. */
+  function updateJoin(root, s, size) {
+    const card = $('.join-card', root);
+    if (!card) return false;
+    const st = s.net && s.net.status;
+    const show = !!(s.room && window.Net && st && st !== 'off' && st !== 'unavailable');
+    card.hidden = !show;
+    if (!show) return false;
+    const url = window.Net.joinUrl(s.room);
+    const img = $('.jc-qr', card);
+    const data = window.qrDataUrl ? window.qrDataUrl(url, size) : null;
+    if (data && img.getAttribute('src') !== data) img.src = data;
+    img.hidden = !data;
+    $('.jc-code', card).textContent = s.room;
+    const u = $('.jc-url', card);
+    if (u) u.textContent = url.replace(/^https?:\/\//, '').replace(/\?.*$/, '') + ' · код ' + s.room;
+    const n = (s.net && s.net.devices) || 0;
+    $('.jc-dev', card).textContent = st === 'online' ? `📱 ${n} на связи` : 'подключаемся…';
+    return true;
+  }
+
   function SplashView() {
     const { main, sub } = titleParts();
     const el = h(`
       <div class="view full splash">
-        <div class="stamp" style="right:190px;top:120px">21<br>.10</div>
+        <div class="stamp r-side" style="right:190px;top:120px">21<br>.10</div>
         <div class="float-stk tag black" style="left:110px;top:120px;transform:rotate(-6deg);--fr:-9deg">кто тут самый умный?</div>
-        <div class="float-stk tag pink" style="right:150px;bottom:150px;transform:rotate(5deg);animation-delay:-2s">без гугла</div>
-        <div class="float-stk tag white" style="left:70px;bottom:60px;transform:rotate(4deg);animation-delay:-3s;--fr:-2deg">телефоны в карман</div>
-        <div class="float-stk emoji-font" style="left:70px;top:380px;font-size:120px;filter:drop-shadow(8px 8px 0 #0A0A0A);animation-delay:-1s">🎂</div>
-        <div class="float-stk emoji-font" style="right:60px;top:560px;font-size:110px;filter:drop-shadow(8px 8px 0 #0A0A0A);animation-delay:-2.5s">💿</div>
+        <div class="float-stk tag pink r-side" style="right:150px;bottom:150px;transform:rotate(5deg);animation-delay:-2s">без гугла</div>
+        <div class="float-stk tag white" style="left:70px;bottom:60px;transform:rotate(4deg);animation-delay:-3s;--fr:-2deg">гугл не поможет</div>
+        <div class="float-stk emoji-font r-side" style="left:70px;top:380px;font-size:120px;filter:drop-shadow(8px 8px 0 #0A0A0A);animation-delay:-1s">🎂</div>
+        <div class="float-stk emoji-font r-side" style="right:60px;top:560px;font-size:110px;filter:drop-shadow(8px 8px 0 #0A0A0A);animation-delay:-2.5s">💿</div>
         <div class="center">
           <span class="tag white" style="transform:rotate(-3deg)">квиз на днюху</span>
           <h1 class="mega wiggle" style="--mega:${megaSize(main, 320)}px">${letters(main, 200)}</h1>
@@ -155,21 +178,30 @@
           <div class="join"></div>
           <div class="hint"></div>
         </div>
+        <div class="join-card" hidden>
+          <span class="tag black jc-head">залетай с телефона</span>
+          <img class="jc-qr" alt="QR-код">
+          <div class="jc-code"></div>
+          <div class="jc-url"></div>
+          <span class="tag lime jc-dev"></span>
+        </div>
       </div>`);
     let sig = '';
     return {
       type: 'splash', el,
       update(s) {
-        const nsig = JSON.stringify(s.teams.map((t) => [t.id, t.name, t.emoji, t.color, t.key]));
+        const nsig = JSON.stringify(s.teams.map((t) => [t.id, t.name, t.emoji, t.color, t.key, t.avatarV || 0]));
         if (nsig !== sig) {
           sig = nsig;
           $('.join', el).innerHTML = s.teams.length
             ? `<span class="label">в игре:</span>` + s.teams.map((t) => chip(t, '', ` <kbd>${esc(U.keyLabel(t.key))}</kbd>`)).join('')
             : '';
         }
+        const phones = updateJoin(el, s, 340);
+        el.classList.toggle('with-qr', phones);
         $('.hint', el).textContent = s.teams.length
-          ? 'жмите свою кнопку — проверим, кто на связи'
-          : 'ждём команды… не стесняемся';
+          ? (phones ? 'жмите кнопку на телефоне или свою клавишу — проверим связь' : 'жмите свою кнопку — проверим, кто на связи')
+          : (phones ? 'сканируйте QR и создавайте команды' : 'ждём команды… не стесняемся');
       },
     };
   }
@@ -197,12 +229,14 @@
           <span class="tag black round">${esc(R.name)}</span>
           <span class="tag white vibe">${esc(pick(['ваш ход, ребята', 'выбирайте, не тяните', 'ну что, кто смелый?', 'дорого = больно']))}</span>
           <div class="logo" style="font-size:${Math.min(64, Math.round(1500 / Math.max(6, titleParts().main.length)))}px">${esc(titleParts().main)}</div>
+          <div class="join-card mini" hidden><img class="jc-qr" alt="QR-код"><div><div class="jc-code"></div><span class="jc-dev"></span></div></div>
         </div>
         <div class="board-grid" style="--cols:${cols}">${cells}</div>
       </div>`);
     return {
       type: 'board', el, round: r,
       update(st) {
+        el.classList.toggle('with-qr', updateJoin(el, st, 160));
         $$('.cell', el).forEach((cell) => {
           const u = st.used[cell.dataset.key];
           cell.classList.toggle('used', !!u);
@@ -501,7 +535,7 @@
       return `
         <div class="pcol p${place}" style="${teamVars(t)};--d:${d}s">
           <div class="who">
-            <div class="ava emoji-font">${place === 1 ? '<span class="crown">👑</span>' : ''}${esc(t.emoji)}</div>
+            <div class="ava emoji-font">${place === 1 ? '<span class="crown">👑</span>' : ''}${avaInner(t)}</div>
             <span class="tag white nm">${esc(t.name)}</span>
           </div>
           <div class="block">${place}<small>${t.score}</small></div>
@@ -647,13 +681,13 @@
   let teamSig = '';
 
   function updateScorebar(s) {
-    const sig = JSON.stringify(s.teams.map((t) => [t.id, t.name, t.emoji, t.color, t.key]));
+    const sig = JSON.stringify(s.teams.map((t) => [t.id, t.name, t.emoji, t.color, t.key, t.avatarV || 0]));
     if (sig !== teamSig) {
       teamSig = sig;
       scorebar.innerHTML = s.teams.map((t) => `
         <div class="team" data-id="${t.id}" style="${teamVars(t)}">
           <span class="crown emoji-font">👑</span>
-          <div class="ava emoji-font">${esc(t.emoji)}</div>
+          <div class="ava emoji-font">${avaInner(t)}</div>
           <div class="meta"><div class="nm">${esc(t.name)}</div><div class="sc">0</div></div>
           <kbd>${esc(U.keyLabel(t.key))}</kbd>
         </div>`).join('');
@@ -723,7 +757,7 @@
     buzzEl.innerHTML = `
       <div class="stripes"></div>
       <div class="inner">
-        <div class="e emoji-font">${esc(t.emoji)}</div>
+        <div class="e emoji-font ${t.avatar ? 'has-av' : ''}">${avaInner(t)}</div>
         <span class="tag ${U.textOn(t.color) === '#ffffff' ? 'white' : 'black'} n">${esc(t.name)}</span>
         <div class="mega">${letters(test ? 'на связи!' : 'ПЕРВЫЕ!', 80)}</div>
       </div>`;
@@ -746,6 +780,7 @@
       case 'select': window.Sfx.play('select'); break;
       case 'correct': {
         window.Sfx.play('correct');
+        window.Music.stinger('correct');
         popup(ev.teamId, ev.delta);
         if (card) {
           retrigger(card, 'hit');
@@ -757,6 +792,7 @@
       }
       case 'wrong':
         window.Sfx.play('wrong');
+        window.Music.stinger('wrong');
         popup(ev.teamId, ev.delta);
         if (card) retrigger(card, 'miss');
         retrigger(shell, 'shake');
@@ -802,8 +838,64 @@
     prevRem = rem;
   }
 
+  /* ---------- большой отсчёт 5-4-3-2-1 по центру ---------- */
+  const cdEl = $('#countdown');
+  let cdShown = 0;
+  function countdown(s) {
+    const t = s.timer;
+    const active = ((s.phase === 'question' && s.current && s.current.stage === 'question') || (s.phase === 'final' && s.final.stage === 'question'))
+      && t.running && view && (view.type === 'question' || view.type === 'finalq') && !busy;
+    const rem = active ? U.timerRemaining(t) : 0;
+    const n = active && rem > 0 && rem <= 5000 ? Math.ceil(rem / 1000) : 0;
+    if (n === cdShown) return;
+    cdShown = n;
+    if (!n) { cdEl.className = ''; cdEl.innerHTML = ''; return; } // пауза/ответ/ноль — сразу убираем
+    cdEl.className = 'on';
+    cdEl.innerHTML = `<div class="cd-num mega" style="--mega:560px">${n}</div>`;
+  }
+
+  /* ---------- фоновая музыка ---------- */
+  const musicLoaded = {}; // mode → at загруженного своего файла
+  let musicSyncAt = 0;
+  function musicSettings(s) {
+    const m = Object.assign({ enabled: true, volume: 0.5, sfx: 0.8, files: {} }, s.music || {});
+    window.Music.configure({ enabled: m.enabled, volume: m.volume });
+    window.Sfx.setSfxVolume(m.sfx);
+    return m;
+  }
+  /** Свои файлы ведущего из IndexedDB (после первого клика, когда звук разрешён). */
+  function syncMusicFiles(s) {
+    if (!window.Sfx.unlocked() || !window.MediaDB) return;
+    const files = (s.music && s.music.files) || {};
+    ['board', 'question', 'final'].forEach((k) => {
+      const want = files[k] ? files[k].at : 0;
+      if ((musicLoaded[k] || 0) === want) return;
+      musicLoaded[k] = want;
+      if (!want) { window.Music.setCustom(k, null); return; }
+      window.MediaDB.get(k).then((rec) => { if (rec && rec.data && musicLoaded[k] === want) window.Music.setCustom(k, rec.data); });
+    });
+  }
+  function musicTick(s) {
+    let mode = 'board', inten = 0, duck = false;
+    const t = s.timer, rem = U.timerRemaining(t), total = t.duration * 1000;
+    const started = t.running || rem < total;
+    if (s.phase === 'question' && s.current) {
+      mode = s.current.stage === 'answer' ? 'board' : 'question'; // ответ показан — обратно к «табло»
+      duck = !!s.buzzer.winner;                                   // «ПЕРВЫЕ!» — музыка проваливается
+      if (s.current.stage === 'question' && started) inten = 1 - rem / total;
+    } else if (s.phase === 'final') {
+      mode = 'final';
+      if (s.final.stage === 'question' && started) inten = 1 - rem / total;
+    }
+    window.Music.update({ mode, intensity: inten, duck });
+    const now = performance.now();
+    if (now - musicSyncAt > 1000) { musicSyncAt = now; syncMusicFiles(s); }
+  }
+
   function frame() {
     const s = Store.get();
+    countdown(s);
+    musicTick(s);
     if (view && view.tick && view.el.isConnected) view.tick(s);
     timerSounds(s);
     requestAnimationFrame(frame);
@@ -846,7 +938,8 @@
     window.Store.setQuiz(q);
     lastEvent = Store.get().eventSeq || 0; // старые события не проигрываем
     render();
-    Store.subscribe((s) => { processEvents(s); render(); });
+    musicSettings(Store.get());
+    Store.subscribe((s) => { processEvents(s); render(); musicSettings(s); });
     requestAnimationFrame(frame);
   });
 

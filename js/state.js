@@ -16,6 +16,15 @@
 
   const PALETTE = ['#C6FF00', '#FF2E93', '#2B4BFF', '#FF6A00', '#FFE600', '#00D1FF', '#A259FF', '#FFFFFF'];
   const DEFAULT_KEYS = ['KeyQ', 'KeyP', 'KeyZ', 'KeyM', 'KeyA', 'KeyL', 'KeyX', 'KeyN'];
+  // служебные клавиши пульта — баззером их назначить нельзя («1» = таймер)
+  const RESERVED_KEYS = ['Digit1', 'Numpad1', 'Space', 'Enter', 'NumpadEnter', 'Tab', 'Escape', 'KeyF', 'Backspace'];
+  // код комнаты для телефонов: без путаемых символов (0/O, 1/I/L, 2/Z, 5/S, 6/G, 8/B)
+  const ROOM_ALPHABET = 'ACDEFHJKMNPRTUVWXY3479';
+  function makeRoom(len = 4) {
+    let r = '';
+    for (let i = 0; i < len; i++) r += ROOM_ALPHABET[Math.floor(Math.random() * ROOM_ALPHABET.length)];
+    return r;
+  }
   const EMOJIS = ['🦄', '🔥', '👾', '🐸', '🍒', '💿', '🦋', '👽', '🌶️', '🧃', '🪩', '🛸', '🍓', '🐙', '⚡', '🎀'];
   const TEAM_NAMES = ['Кислотные', 'Розовые сопли', 'Синий экран', 'Рыжий вайб', 'Жёлтая пресса', 'Голубая волна', 'Фиолетики', 'Белые воротнички'];
 
@@ -32,7 +41,7 @@
     if (code.startsWith('Key')) return code.slice(3);
     if (code.startsWith('Digit')) return code.slice(5);
     if (code.startsWith('Numpad')) return 'Num' + code.slice(6);
-    const map = { Space: '␣', Semicolon: ';', Quote: "'", Comma: ',', Period: '.', Slash: '/', BracketLeft: '[', BracketRight: ']', Minus: '-', Equal: '=', Backquote: '`' };
+    const map = { Space: 'Пробел', Semicolon: ';', Quote: "'", Comma: ',', Period: '.', Slash: '/', BracketLeft: '[', BracketRight: ']', Minus: '-', Equal: '=', Backquote: '`' };
     return map[code] || code;
   }
 
@@ -92,10 +101,13 @@
       history: [],               // снимки для undo
       events: [],
       eventSeq: 0,
+      room: null,                // код комнаты для телефонов-баззеров
+      music: { enabled: true, volume: 0.5, sfx: 0.8, files: {} }, // files: mode → {name, at} (сами файлы — в IndexedDB)
+      net: { status: 'off', devices: 0, byTeam: {}, transport: '' }, // публикует пульт
     };
   }
 
-  function makeTeam(s) {
+  function makeTeam(s, overrides) {
     const i = s.teams.length;
     const usedColors = new Set(s.teams.map((t) => t.color));
     const usedKeys = new Set(s.teams.map((t) => t.key));
@@ -107,6 +119,10 @@
       color: PALETTE.find((c) => !usedColors.has(c)) || PALETTE[i % PALETTE.length],
       key: DEFAULT_KEYS.find((k) => !usedKeys.has(k)) || '',
       score: 0,
+      device: null,      // clientId привязанного телефона (1 телефон = 1 команда)
+      avatar: null,      // dataURL 256×256 (нарисовали/загрузили на телефоне) — вместо эмодзи
+      avatarV: 0,        // версия аватара: телефонам рассылаем номер, а не картинку
+      ...(overrides || {}),
     };
   }
 
@@ -145,7 +161,32 @@
         break;
       case 'teamUpdate': {
         const t = team(s, a.id);
-        if (t) Object.assign(t, a.patch);
+        if (!t) break;
+        const patch = Object.assign({}, a.patch);
+        if (patch.key && RESERVED_KEYS.includes(patch.key)) delete patch.key;
+        Object.assign(t, patch);
+        break;
+      }
+      case 'teamCreate': // команда зарегистрировалась с телефона
+        if (s.teams.length < 8 && !team(s, a.id)) {
+          if (a.device) s.teams.forEach((t) => { if (t.device === a.device) t.device = null; });
+          s.teams.push(makeTeam(s, { id: a.id, name: String(a.name || '').slice(0, 28) || 'Без названия', emoji: a.emoji || '⭐', device: a.device || null, avatar: a.avatar || null, avatarV: a.avatar ? 1 : 0 }));
+          emit(s, { kind: 'teamJoin', teamId: a.id });
+        }
+        break;
+      case 'teamAvatar': { // avatar: dataURL или null (сброс к эмодзи)
+        const t = team(s, a.teamId);
+        if (!t) break;
+        t.avatar = a.avatar || null;
+        if (a.emoji) t.emoji = a.emoji;
+        t.avatarV = (t.avatarV || 0) + 1;
+        break;
+      }
+      case 'bindDevice': { // телефон занял команду (device: null — отвязать)
+        const t = team(s, a.teamId);
+        if (!t) break;
+        if (a.device) s.teams.forEach((x) => { if (x.device === a.device) x.device = null; });
+        t.device = a.device || null;
         break;
       }
       case 'teamRemove':
@@ -271,7 +312,7 @@
         if (!t) break;
         if (s.phase === 'setup') { emit(s, { kind: 'buzz', teamId: t.id, test: true }); break; }
         const cur = s.current;
-        if (s.phase !== 'question' || !cur || cur.stage !== 'question') break;
+        if (s.phase !== 'question' || !cur || cur.stage !== 'question' || cur.special) break;
         if (s.buzzer.winner || cur.wrong.includes(t.id)) break;
         s.buzzer = { winner: t.id, at: now() };
         pauseTimer(s); // как в «Своей игре»: нажали — время стоп
@@ -338,6 +379,15 @@
         emit(s, { kind: a.correct ? 'correct' : 'wrong', teamId: t.id, delta: a.correct ? bet : -bet, final: true });
         break;
       }
+      case 'setRoom':
+        s.room = a.room;
+        break;
+      case 'musicSet':
+        s.music = Object.assign({ enabled: true, volume: 0.5, sfx: 0.8, files: {} }, s.music || {}, a.patch);
+        break;
+      case 'netInfo':
+        s.net = Object.assign({}, s.net || {}, a.net);
+        break;
       case 'backToFinal':
         s.phase = 'final';
         break;
@@ -350,6 +400,9 @@
       case 'resetGame': {
         const teams = s.teams.map((t) => Object.assign({}, t, { score: 0 }));
         const fresh = initialState(teams);
+        fresh.room = s.room;
+        fresh.net = s.net;
+        fresh.music = s.music || fresh.music;
         fresh.rev = s.rev;
         fresh.eventSeq = s.eventSeq;
         emit(fresh, { kind: 'reset' });
@@ -410,5 +463,5 @@
     setQuiz(q) { QUIZ = q; },
     quiz: () => QUIZ,
   };
-  window.QuizUtil = { cellKey, keyLabel, textOn, timerRemaining, getQ, cellValue, currentValue, PALETTE, EMOJIS, DEFAULT_KEYS };
+  window.QuizUtil = { makeRoom, RESERVED_KEYS, cellKey, keyLabel, textOn, timerRemaining, getQ, cellValue, currentValue, PALETTE, EMOJIS, DEFAULT_KEYS };
 })();

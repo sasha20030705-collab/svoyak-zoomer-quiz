@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#2B4BFF">
+  <title>Своя игра — баззер</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Manrope:wght@600;700;800&family=Unbounded:wght@700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/buzzer.css">
+</head>
+<body>
+  <header class="bar">
+    <span class="room">комната <b id="room-code">—</b></span>
+    <span class="net" id="net"><i></i><span>подключаемся…</span></span>
+  </header>
+
+  <!-- вход: новая команда или существующая -->
+  <main id="join" class="screen" hidden>
+    <h1 class="title">ЗАЛЕТАЙ<br>В ИГРУ</h1>
+    <section class="card">
+      <h2>новая команда</h2>
+      <input id="team-name" type="text" maxlength="28" placeholder="название команды" autocomplete="off" enterkeyhint="done">
+      <div class="av-choose">
+        <div class="av-preview" id="av-preview"></div>
+        <div class="av-modes">
+          <span class="muted">аватар:</span>
+          <button type="button" class="btn sm" data-mode="draw">✏️ нарисовать</button>
+          <button type="button" class="btn sm" data-mode="upload">🖼 загрузить</button>
+        </div>
+      </div>
+      <div class="emojis" id="emojis"></div>
+      <button class="btn lime big" id="create">СОЗДАТЬ И ИГРАТЬ →</button>
+    </section>
+    <div class="notice" id="join-msg" hidden></div>
+    <section class="card" id="restore-card" hidden>
+      <h2>восстановить команду</h2>
+      <p class="muted">Телефон сел или потерялся? Выбери свою команду — баллы на месте. Здесь только команды без телефона.</p>
+      <div id="teams" class="teams"></div>
+    </section>
+  </main>
+
+  <!-- кнопка -->
+  <main id="buzz" class="screen" hidden>
+    <div class="me">
+      <button class="me-chip" id="me-chip" aria-label="меню команды"></button>
+      <span class="score" id="score">0</span>
+    </div>
+    <div class="btn-wrap">
+      <button id="big" class="big-btn" aria-label="баззер">
+        <span class="lbl" id="lbl">ЖДЁМ</span>
+        <span class="sub" id="sub"></span>
+      </button>
+    </div>
+    <div class="status" id="status"></div>
+  </main>
+
+  <!-- меню команды: сменить аватар -->
+  <div id="menu" class="sheet-bg" hidden>
+    <div class="sheet">
+      <h2>аватар команды</h2>
+      <div class="av-preview big" id="menu-preview"></div>
+      <div class="emojis" id="menu-emojis"></div>
+      <div class="row2">
+        <button class="btn" data-menu="draw">✏️ нарисовать</button>
+        <button class="btn" data-menu="upload">🖼 загрузить</button>
+      </div>
+      <button class="btn lime" data-menu="close">готово</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="js/net.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/avatar.js"></script>
+  <script src="js/buzzer.js"></script>
+</body>
+</html>

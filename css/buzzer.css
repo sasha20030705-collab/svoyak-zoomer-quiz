@@ -1,0 +1,117 @@
+/* Баззер на телефоне: 360–430 px, всё крупно и под большой палец. */
+html, body { height: 100%; }
+body {
+  margin: 0; min-height: 100dvh; display: flex; flex-direction: column;
+  background-color: var(--bg-c, var(--blue));
+  background-image: radial-gradient(circle, rgba(0, 0, 0, .2) 2px, transparent 2.6px);
+  background-size: 16px 16px;
+  color: var(--black); overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none;
+  transition: background-color .3s;
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+}
+[hidden] { display: none !important; }
+
+.bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px; background: var(--black); color: var(--white); border-bottom: 4px solid var(--lime); font: 800 13px var(--font-head); }
+.bar .room b { font: 400 18px var(--font-display); color: var(--lime); letter-spacing: .06em; margin-left: 4px; }
+.net { display: inline-flex; align-items: center; gap: 6px; text-transform: lowercase; }
+.net i { width: 10px; height: 10px; border-radius: 50%; background: var(--orange); }
+.net.online i { background: var(--lime); box-shadow: 0 0 8px var(--lime); }
+.net.bad i { background: var(--red); animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: .2; } }
+
+.screen { flex: 1; display: flex; flex-direction: column; padding: 16px; gap: 16px; }
+.title { margin: 6px 0 0; font: 400 52px/.92 var(--font-display); color: var(--white); -webkit-text-stroke: 3px var(--black); paint-order: stroke fill; text-shadow: 5px 5px 0 var(--black), 9px 9px 0 var(--pink); transform: rotate(-2deg); }
+.card { background: var(--white); border: 4px solid var(--black); border-radius: 14px; box-shadow: 6px 6px 0 var(--black); padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.card:nth-of-type(2) { transform: rotate(.6deg); }
+.card h2 { margin: 0; font: 800 16px var(--font-head); text-transform: uppercase; }
+.muted { margin: 0; color: #555; font: 700 14px var(--font-body); }
+input[type=text] { width: 100%; min-height: 52px; padding: 8px 12px; border: 4px solid var(--black); border-radius: 12px; font: 800 20px var(--font-body); background: var(--paper); -webkit-user-select: text; user-select: text; }
+input:focus { outline: 3px solid var(--blue); outline-offset: 2px; }
+.emojis { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+.emojis button { aspect-ratio: 1; border: 3px solid var(--black); border-radius: 10px; background: var(--white); font-size: 22px; padding: 0; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+.emojis button.on { background: var(--lime); box-shadow: 3px 3px 0 var(--black); transform: rotate(-6deg) scale(1.08); }
+.btn { min-height: 52px; border: 4px solid var(--black); border-radius: 12px; background: var(--white); box-shadow: 5px 5px 0 var(--black); font: 800 17px var(--font-head); text-transform: uppercase; padding: 10px 14px; color: var(--black); touch-action: manipulation; }
+.btn:active { transform: translate(4px, 4px); box-shadow: 1px 1px 0 var(--black); }
+.btn.lime { background: var(--lime); }
+.btn:disabled { opacity: .5; }
+.teams { display: flex; flex-direction: column; gap: 10px; }
+.team-btn { display: flex; align-items: center; gap: 12px; text-align: left; background: var(--tc); color: var(--tx); text-transform: none; font-size: 18px; }
+.team-btn .e { flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%; background: var(--white); border: 3px solid var(--black); display: grid; place-items: center; font-size: 22px; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+.team-btn .n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-btn .s { font: 400 16px var(--font-display); }
+
+/* экран кнопки */
+#buzz { align-items: center; justify-content: space-between; }
+.me { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.me-chip { color: var(--black); display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 70%; padding: 8px 14px 8px 8px; border: 4px solid var(--black); border-radius: 999px; background: var(--white); box-shadow: 4px 4px 0 var(--black); font: 800 17px var(--font-head); transform: rotate(-2deg); }
+.me-chip .e { font-size: 24px; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+.me-chip .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.score { font: 400 34px var(--font-display); color: var(--white); -webkit-text-stroke: 2px var(--black); paint-order: stroke fill; text-shadow: 4px 4px 0 var(--black); }
+.btn-wrap { flex: 1; width: 100%; display: grid; place-items: center; }
+.big-btn {
+  position: relative; width: min(84vw, 56dvh, 380px); aspect-ratio: 1; border-radius: 50%;
+  border: 7px solid var(--black); background: var(--tc, var(--lime)); color: var(--tx, var(--black));
+  box-shadow: 0 12px 0 var(--black), 0 12px 0 7px rgba(0, 0, 0, .25);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 24px;
+  touch-action: manipulation; transition: transform .08s, box-shadow .08s, filter .3s;
+}
+.big-btn::after { content: ""; position: absolute; inset: 12px; border-radius: 50%; border: 3px dashed rgba(0, 0, 0, .35); pointer-events: none; }
+.big-btn:active, .big-btn.down { transform: translateY(10px); box-shadow: 0 2px 0 var(--black); }
+.big-btn .lbl { font: 400 clamp(38px, 13vw, 60px)/.95 var(--font-display); text-align: center; }
+.big-btn .sub { font: 800 15px/1.2 var(--font-head); text-align: center; max-width: 85%; text-transform: uppercase; }
+.big-btn.idle { filter: saturate(.25) brightness(.9); }
+.big-btn.armed { animation: pulse .7s ease-in-out infinite; }
+.big-btn.armed::before { content: ""; position: absolute; inset: -7px; border-radius: 50%; border: 6px solid var(--white); animation: ring 1.1s ease-out infinite; pointer-events: none; }
+@keyframes pulse { 50% { transform: scale(1.05) rotate(-2deg); } }
+@keyframes ring { from { transform: scale(1); opacity: .9; } to { transform: scale(1.35); opacity: 0; } }
+.big-btn.won { animation: won .5s var(--ease-pop); background: var(--lime); color: var(--black); }
+@keyframes won { 0% { transform: scale(.8) rotate(-10deg); } 60% { transform: scale(1.12) rotate(4deg); } }
+.big-btn.blocked { filter: grayscale(1) brightness(.85); }
+.big-btn.shake { animation: shake .45s; }
+@keyframes shake { 20%, 60% { transform: translateX(-14px) rotate(-3deg); } 40%, 80% { transform: translateX(14px) rotate(3deg); } }
+.status { min-height: 46px; padding: 10px 16px; border: 4px solid var(--black); border-radius: 12px; background: var(--white); box-shadow: 4px 4px 0 var(--black); font: 800 15px/1.25 var(--font-head); text-align: center; text-transform: uppercase; transform: rotate(1deg); max-width: 100%; }
+.status:empty { visibility: hidden; }
+.link { background: none; border: 0; color: var(--white); font: 700 14px var(--font-body); text-decoration: underline; padding: 6px; }
+body.flash-won { animation: flash-won .6s steps(3); }
+@keyframes flash-won { 0%, 100% { background-color: var(--bg-c, var(--blue)); } 33% { background-color: var(--lime); } 66% { background-color: var(--white); } }
+
+.notice { padding: 12px 14px; border: 4px solid var(--black); border-radius: 12px; background: var(--yellow); box-shadow: 4px 4px 0 var(--black); font: 800 15px/1.3 var(--font-head); transform: rotate(-1deg); }
+
+/* аватар: превью в том же стикер-стиле, что на экране гостей */
+.av-preview { width: 76px; height: 76px; flex: 0 0 auto; border: 4px solid var(--black); border-radius: 15%; background: var(--tc, var(--lime)); box-shadow: 5px 5px 0 var(--black); transform: rotate(-5deg); display: grid; place-items: center; font-size: 44px; overflow: hidden; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+.av-preview img, .me-chip img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.av-preview.big { width: 120px; height: 120px; font-size: 70px; margin: 4px auto 8px; }
+.av-choose { display: flex; align-items: center; gap: 14px; }
+.av-modes { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn.sm { min-height: 40px; font-size: 13px; padding: 6px 10px; box-shadow: 3px 3px 0 var(--black); }
+.me-chip .av { width: 34px; height: 34px; border-radius: 8px; border: 2px solid var(--black); overflow: hidden; display: grid; place-items: center; font-size: 22px; background: var(--white); flex: 0 0 auto; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+
+.sheet-bg { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, .55); display: flex; align-items: flex-end; }
+.sheet { width: 100%; background: var(--paper); border-top: 4px solid var(--black); border-radius: 20px 20px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px; animation: sheet-in .3s var(--ease-pop); }
+.sheet h2 { margin: 0; font: 800 18px var(--font-head); text-transform: uppercase; text-align: center; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@keyframes sheet-in { from { transform: translateY(100%); } }
+
+/* редактор аватара: на весь экран */
+body.av-open { overflow: hidden; }
+.av-ov { position: fixed; inset: 0; z-index: 60; background: var(--paper); display: flex; flex-direction: column; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+.av-top { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--black); color: var(--white); font: 800 15px var(--font-head); text-transform: uppercase; }
+.av-top b { flex: 1; }
+.av-x { width: 42px; height: 42px; border-radius: 10px; border: 3px solid var(--white); background: none; color: var(--white); font-size: 20px; }
+.av-ok { min-height: 42px; padding: 6px 12px; font-size: 14px; box-shadow: 3px 3px 0 var(--lime); }
+.av-stage { flex: 1; min-height: 0; display: grid; place-items: center; padding: 8px; }
+.av-canvas { touch-action: none; border: 4px solid var(--black); border-radius: 12px; box-shadow: 6px 6px 0 var(--black); background: #fff; }
+.av-tools { padding: 10px 12px 14px; display: flex; flex-direction: column; gap: 10px; background: var(--white); border-top: 4px solid var(--black); }
+.av-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font: 800 13px var(--font-head); }
+.av-sw { width: 36px; height: 36px; border-radius: 50%; border: 3px solid var(--black); padding: 0; }
+.av-sw.sm { width: 28px; height: 28px; }
+.av-sw.on { box-shadow: 0 0 0 3px var(--white), 0 0 0 6px var(--black); transform: scale(1.08); }
+.av-tool { min-width: 44px; height: 40px; border: 3px solid var(--black); border-radius: 10px; background: var(--white); font: 800 14px var(--font-head); display: grid; place-items: center; padding: 0 10px; }
+.av-tool.on { background: var(--lime); box-shadow: 3px 3px 0 var(--black); }
+.av-tool.size i { display: block; border-radius: 50%; background: var(--black); }
+.av-frame { position: relative; box-sizing: content-box; overflow: hidden; touch-action: none; border: 4px solid var(--black); border-radius: 15%; background: var(--tc); box-shadow: 8px 8px 0 var(--black); transform: rotate(-5deg); }
+.av-frame img { position: absolute; left: 50%; top: 50%; max-width: none; transform-origin: 50% 50%; pointer-events: none; user-select: none; -webkit-user-drag: none; }
+.av-cap { margin: 0; text-align: center; font: 800 14px var(--font-head); text-transform: uppercase; padding-bottom: 6px; }
+.av-zoom { flex: 1; min-width: 120px; accent-color: var(--pink); height: 32px; }
+.av-toast { position: fixed; left: 16px; right: 16px; bottom: 20px; z-index: 80; background: var(--black); color: var(--lime); padding: 12px 14px; border-radius: 12px; font: 800 14px var(--font-head); }

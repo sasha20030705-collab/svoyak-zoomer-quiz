@@ -139,3 +139,25 @@ input:focus, select:focus, .btn:focus-visible { outline: 3px solid var(--blue); 
   .jrow .btn { width: 100%; }
   .topbar .btn { padding: 6px 10px; }
 }
+
+/* телефоны */
+.room-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.room-code { font: 400 40px/1 var(--font-display); letter-spacing: .08em; }
+.join-link { color: var(--blue); font-weight: 800; }
+.qr { width: 110px; height: 110px; border: 3px solid var(--black); border-radius: 8px; background: var(--white); image-rendering: pixelated; flex: 0 0 auto; }
+.devs { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+.dev-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 2px dashed #c9c4b5; }
+.dev-row:last-child { border-bottom: 0; }
+.dev-n { font: 800 14px var(--font-head); white-space: nowrap; }
+.pill.orange { background: var(--orange); }
+
+.av { overflow: hidden; }
+.av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.dev-row { flex-wrap: wrap; }
+
+/* музыка */
+.mus-vol { display: grid; grid-template-columns: 80px 1fr; align-items: center; gap: 8px; margin-bottom: 6px; font: 800 13px var(--font-head); text-transform: uppercase; }
+.mus-vol input { width: 100%; accent-color: var(--pink); }
+.mus-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 2px dashed #c9c4b5; }
+.mus-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.mus-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

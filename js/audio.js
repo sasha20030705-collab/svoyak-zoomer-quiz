@@ -4,7 +4,10 @@
 (function () {
   'use strict';
   const MUTE_KEY = 'svoyak:muted';
-  let ctx = null, master = null;
+  // граф: эффекты → master(громкость эффектов) → компрессор → out(mute) → динамики
+  //       музыка → musicBus → out(mute)
+  let ctx = null, master = null, out = null, musicBus = null;
+  let sfxVolume = 0.8;
   let muted = false;
   try { muted = localStorage.getItem(MUTE_KEY) === '1'; } catch (e) { /* хранилище недоступно */ }
   const listeners = new Set();
@@ -17,10 +20,15 @@
       const comp = ctx.createDynamicsCompressor();
       comp.threshold.value = -14;
       comp.ratio.value = 6;
+      out = ctx.createGain();
+      out.gain.value = muted ? 0 : 1;
+      out.connect(ctx.destination);
       master = ctx.createGain();
-      master.gain.value = muted ? 0 : 0.7;
+      master.gain.value = 0.85 * sfxVolume;
       master.connect(comp);
-      comp.connect(ctx.destination);
+      comp.connect(out);
+      musicBus = ctx.createGain();
+      musicBus.connect(out);
     }
     if (ctx.state === 'suspended') ctx.resume();
     return ctx;
@@ -133,7 +141,7 @@
   function setMuted(m) {
     muted = !!m;
     try { localStorage.setItem(MUTE_KEY, muted ? '1' : '0'); } catch (e) { /* ignore */ }
-    if (master) master.gain.setTargetAtTime(muted ? 0 : 0.7, ctx.currentTime, 0.02);
+    if (out) out.gain.setTargetAtTime(muted ? 0 : 1, ctx.currentTime, 0.02);
     listeners.forEach((fn) => fn(muted));
   }
 
@@ -145,6 +153,13 @@
       try { if (ensure()) sounds[name](); } catch (e) { console.warn('sfx', e); }
     },
     isMuted: () => muted,
+    /** Общий AudioContext и шина для музыки (js/music.js). */
+    context: () => ensure(),
+    musicBus: () => (ensure(), musicBus),
+    setSfxVolume(v) {
+      sfxVolume = Math.max(0, Math.min(1, Number(v)));
+      if (master) master.gain.setTargetAtTime(0.85 * sfxVolume, ctx.currentTime, 0.05);
+    },
     setMuted,
     toggle() { setMuted(!muted); return muted; },
     onChange(fn) { listeners.add(fn); },

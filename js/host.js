@@ -13,6 +13,10 @@
 
   const mainEl = $('#main'), sideEl = $('#side'), bannersEl = $('#banners'), toastEl = $('#toast');
   const EMO_PICKS = ['🦄', '🔥', '👾', '🐸', '🍒', '💿', '🦋', '👽', '🪩', '🛸', '🐙', '⚡', '🎀', '🐱', '🦖', '👑'];
+  // «1» — старт/пауза таймера (верхний ряд и цифровой блок, на любой раскладке)
+  const TIMER_KEYS = ['Digit1', 'Numpad1'];
+  // эти клавиши нельзя назначить баззером команды
+  const RESERVED_KEYS = ['Digit1', 'Numpad1', 'Space', 'Enter', 'NumpadEnter', 'Tab', 'Escape', 'KeyF', 'Backspace'];
   const TYPE_NAMES = { text: 'текст', image: 'картинка', fusion: 'слияние', zoom: 'зум', blur: 'размытие', emoji: 'эмодзи' };
 
   let quiz = null, source = '';
@@ -39,7 +43,7 @@
     return false;
   }
   const teamById = (s, id) => s.teams.find((t) => t.id === id);
-  const av = (t) => `<span class="av emoji-font" style="${tv(t)}">${esc(t.emoji)}</span>`;
+  const av = (t) => `<span class="av emoji-font" style="${tv(t)}">${t.avatar ? `<img src="${t.avatar}" alt="">` : esc(t.emoji)}</span>`;
 
   /* ======================================================================
      ПАНЕЛИ
@@ -310,9 +314,11 @@
             <button class="btn sm ${s.phase === 'final' ? 'black' : ''}" data-act="gotoFinal" ${quiz.final ? '' : 'disabled'}>Финал</button>
             <button class="btn sm ${s.phase === 'winner' ? 'black' : ''}" data-act="showWinner">🏆 Победитель</button>
           </div>
-          <p class="hotkeys" style="margin:12px 0 0">Клавиши: <span class="kbd">␣</span> таймер · <span class="kbd">Esc</span> к табло · <span class="kbd">Ctrl+Z</span> undo · клавиши команд = баззер</p>
+          <p class="hotkeys" style="margin:12px 0 0">Клавиши: <span class="kbd">1</span> таймер · <span class="kbd">Esc</span> к табло · <span class="kbd">Ctrl+Z</span> undo · клавиши команд = баззер</p>
         </section>`;
     }
+    html += renderPhones(s);
+    html += renderMusic(s);
     html += `
       <section class="card">
         <h2>Экран гостей</h2>
@@ -324,6 +330,75 @@
         <button class="btn ${armedKey === 'reset' ? 'danger' : ''} wide" style="margin-top:12px" data-act="reset">${armedKey === 'reset' ? 'Точно сбросить? Жми ещё раз' : '⟲ Сбросить игру'}</button>
       </section>`;
     return html;
+  }
+
+  /* ---------- телефоны-баззеры ---------- */
+  const NET_LABEL = {
+    off: ['выкл', ''], connecting: ['подключаемся…', 'orange'], online: ['онлайн', 'lime'],
+    offline: ['нет связи', 'pink'], 'id-taken': ['код занят, ждём…', 'orange'],
+    unavailable: ['недоступно', 'pink'], 'other-tab': ['в другой вкладке', ''],
+  };
+  function renderPhones(s) {
+    const room = s.room;
+    const st = (window.Remote && window.Remote.status) || 'off';
+    const [label, cls] = NET_LABEL[st] || [st, ''];
+    const url = room && window.Net ? window.Net.joinUrl(room) : '';
+    const qr = url && window.qrDataUrl ? window.qrDataUrl(url, 220) : null;
+    const online = new Set((s.net && s.net.online) || []);
+    const total = (s.net && s.net.devices) || 0;
+    const unbound = (s.net && s.net.unbound) || 0;
+    // у каждой команды: свой телефон на связи / не на связи, либо клавиатура
+    const rows = s.teams.map((t) => {
+      const state = t.device
+        ? (online.has(t.id) ? '<span class="dev-n">🟢 на связи</span>' : '<span class="dev-n muted">⚪ не на связи</span>')
+        : `<span class="dev-n muted">⌨️ клавиша <span class="kbd">${esc(U.keyLabel(t.key))}</span></span>`;
+      const btn = t.device
+        ? `<button class="btn sm ${armedKey === 'unbind-' + t.id ? 'danger' : ''}" data-act="unbind" data-id="${t.id}">${armedKey === 'unbind-' + t.id ? 'точно?' : 'отвязать'}</button>`
+        : '';
+      const avBtn = t.avatar ? `<button class="btn sm" data-act="avatarReset" data-id="${t.id}" title="вернуть эмодзи">✕ аватар</button>` : '';
+      return `<div class="dev-row"><div class="jname">${av(t)}<span>${esc(t.name)}</span></div><div class="row" style="gap:6px;justify-content:flex-end">${state}${btn}${avBtn}</div></div>`;
+    }).join('');
+    const warn = st === 'unavailable' || st === 'offline'
+      ? `<div class="banner sample" style="margin:10px 0 0">Сеть для телефонов недоступна${s.net && s.net.info ? ' (' + esc(s.net.info) + ')' : ''}. Играем с клавиатурными баззерами — всё остальное работает.</div>`
+      : st === 'other-tab' ? '<p class="muted small">Сеть для телефонов уже держит другая открытая вкладка пульта.</p>' : '';
+    return `
+      <section class="card">
+        <h2>Телефоны <span class="pill ${cls}">${label}</span><span class="sp muted small">${total} 📱</span></h2>
+        <div class="room-row">
+          <div>
+            <div class="small muted">код комнаты</div>
+            <div class="room-code">${esc(room || '—')}</div>
+            ${url ? `<a class="small join-link" href="${esc(url)}" target="_blank" rel="noopener">ссылка для телефона ↗</a>` : ''}
+          </div>
+          ${qr ? `<img class="qr" src="${qr}" alt="QR-код для телефона" width="110" height="110">` : ''}
+        </div>
+        ${warn}
+        <div class="devs">${rows}${unbound ? `<div class="dev-row"><span class="muted">телефонов без команды</span><span class="dev-n">📱×${unbound}</span></div>` : ''}</div>
+        <p class="muted small" style="margin:8px 0 0">1 телефон = 1 команда. «Отвязать» — если телефон сел или потерялся: баллы останутся, команду можно восстановить с другого телефона.</p>
+        <button class="btn sm ${armedKey === 'newRoom' ? 'danger' : ''}" style="margin-top:10px" data-act="newRoom">${armedKey === 'newRoom' ? 'Точно? Телефоны отвалятся' : 'новая комната'}</button>
+      </section>`;
+  }
+
+  /* ---------- музыка ---------- */
+  const MUSIC_SLOTS = [['board', 'Табло'], ['question', 'Вопрос'], ['final', 'Финал']];
+  function renderMusic(s) {
+    const m = Object.assign({ enabled: true, volume: 0.5, sfx: 0.8, files: {} }, s.music || {});
+    const slots = MUSIC_SLOTS.map(([k, label]) => {
+      const f = m.files[k];
+      return `<div class="mus-row">
+        <div class="mus-name"><b>${label}</b><span class="muted small">${f ? '🎧 ' + esc(f.name) : 'встроенная (синтез)'}</span></div>
+        <label class="btn sm">свой файл<input type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg" data-music-file="${k}" hidden></label>
+        ${f ? `<button class="btn sm" data-act="musicDel" data-key="${k}">✕</button>` : ''}
+      </div>`;
+    }).join('');
+    return `
+      <section class="card">
+        <h2>Музыка <span class="sp"></span><button class="btn sm ${m.enabled ? 'lime' : ''}" data-act="musicToggle">${m.enabled ? '🎵 вкл' : '🔇 выкл'}</button></h2>
+        <div class="mus-vol"><span>музыка</span><input type="range" min="0" max="100" value="${Math.round(m.volume * 100)}" data-music-range="volume" aria-label="громкость музыки"></div>
+        <div class="mus-vol"><span>эффекты</span><input type="range" min="0" max="100" value="${Math.round(m.sfx * 100)}" data-music-range="sfx" aria-label="громкость эффектов"></div>
+        ${slots}
+        <p class="muted small" style="margin:8px 0 0">Свои mp3/m4a хранятся в этом браузере и играют на экране гостей (открой его здесь же). Звук пойдёт после первого клика по экрану гостей.</p>
+      </section>`;
   }
 
   function renderBanners() {
@@ -438,6 +513,23 @@
       case 'finalJudge': d({ type: 'finalJudge', teamId: id, correct: b.dataset.ok === '1' }); break;
       case 'showWinner': d({ type: 'showWinner' }); break;
       case 'backToFinal': d({ type: 'backToFinal' }); break;
+      case 'musicToggle': d({ type: 'musicSet', patch: { enabled: !(s.music && s.music.enabled === false ? false : true) } }); break;
+      case 'musicDel': {
+        const key = b.dataset.key;
+        window.MediaDB.del(key).then(() => {
+          const files = Object.assign({}, (S.get().music || {}).files || {});
+          delete files[key];
+          d({ type: 'musicSet', patch: { files } });
+        });
+        break;
+      }
+      case 'avatarReset': d({ type: 'teamAvatar', teamId: id, avatar: null }); toast('Аватар сброшен — снова эмодзи'); break;
+      case 'unbind':
+        if (confirmTwice('unbind-' + id, 'Отвязать телефон? Баллы команды останутся. Жми ещё раз')) window.Remote.unbind(id);
+        break;
+      case 'newRoom':
+        if (confirmTwice('newRoom', 'Новый код комнаты — телефонам придётся сканировать заново. Жми ещё раз')) window.Remote.newRoom();
+        break;
       case 'reset':
         if (confirmTwice('reset', 'Сброс счёта и табло. Команды останутся. Жми ещё раз')) { capture = null; d({ type: 'resetGame' }); toast('Игра сброшена'); }
         break;
@@ -457,6 +549,26 @@
     else if (kind === 'duration') d({ type: 'timerDuration', seconds: +el.value });
   });
 
+  // громкость — по отпусканию ползунка (иначе перерисовка сорвёт перетаскивание)
+  document.addEventListener('change', (e) => {
+    const el = e.target;
+    if (el.dataset && el.dataset.musicRange) {
+      d({ type: 'musicSet', patch: { [el.dataset.musicRange]: Math.max(0, Math.min(1, +el.value / 100)) } });
+    } else if (el.dataset && el.dataset.musicFile) {
+      const key = el.dataset.musicFile;
+      const f = el.files && el.files[0];
+      if (!f) return;
+      if (f.size > 40 * 1024 * 1024) { toast('Файл больше 40 МБ — возьми покороче'); return; }
+      toast('Сохраняем «' + f.name + '»…');
+      f.arrayBuffer().then((data) => window.MediaDB.put(key, { name: f.name, type: f.type, data })).then((ok) => {
+        if (!ok) { toast('Не получилось сохранить файл (IndexedDB недоступна)'); return; }
+        const files = Object.assign({}, (S.get().music || {}).files || {}, { [key]: { name: f.name, at: Date.now() } });
+        d({ type: 'musicSet', patch: { files } });
+        toast('Готово: «' + f.name + '» играет на экране гостей');
+      });
+    }
+  });
+
   /* ---------- клавиатура ---------- */
   document.addEventListener('keydown', (e) => {
     const s = S.get();
@@ -464,7 +576,7 @@
     if (capture) {
       e.preventDefault();
       if (e.code === 'Escape') { capture = null; render(); return; }
-      if (['Space', 'Enter', 'Tab', 'KeyF'].includes(e.code)) { toast('Эта клавиша занята, выбери другую'); return; }
+      if (RESERVED_KEYS.includes(e.code)) { toast('Эта клавиша занята (служебная), выбери другую'); return; }
       const other = s.teams.find((t) => t.key === e.code && t.id !== capture);
       if (other) { toast(`Клавиша уже у «${other.name}»`); return; }
       const id = capture;
@@ -479,7 +591,7 @@
     // если клавиатура одна на всех — команды могут жать и здесь
     const t = s.teams.find((x) => x.key && x.key === e.code);
     if (t) { e.preventDefault(); d({ type: 'buzz', teamId: t.id }); return; }
-    if (e.code === 'Space' && (s.phase === 'question' || s.phase === 'final')) { e.preventDefault(); d({ type: s.timer.running ? 'timerPause' : 'timerStart' }); }
+    if (TIMER_KEYS.includes(e.code) && (s.phase === 'question' || s.phase === 'final')) { e.preventDefault(); d({ type: s.timer.running ? 'timerPause' : 'timerStart' }); }
     else if (e.code === 'Escape' && s.phase === 'question') d({ type: 'backToBoard' });
   });
 
@@ -503,6 +615,7 @@
     S.setQuiz(quiz);
     lastEvent = S.get().eventSeq || 0;
     S.subscribe((s) => { onEvents(s); render(); });
+    if (window.Remote) { window.Remote.onChange(render); window.Remote.start(); }
     render();
   });
 })();

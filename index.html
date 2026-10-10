@@ -23,11 +23,12 @@
   </div>
   <div id="toast" class="toast" hidden></div>
 
-  <!-- телефоны-баззеры: WebRTC через PeerJS cloud и генератор QR. Без них игра идёт на клавиатурных баззерах -->
-  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="js/state.js"></script>
   <script src="js/loader.js"></script>
+  <!-- связь с телефонами: библиотеки лежат локально (CDN бывают заблокированы) -->
+  <script src="js/vendor/mqtt-5.10.1.min.js"></script>
+  <script src="js/vendor/peerjs-1.5.4.min.js"></script>
+  <script src="js/qr.js"></script>
   <script src="js/net.js"></script>
   <script src="js/mediadb.js"></script>
   <script src="js/remote.js"></script>

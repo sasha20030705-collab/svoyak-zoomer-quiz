@@ -3,8 +3,8 @@
    - принимает join/buzz от телефонов и превращает их в действия Store;
    - рассылает телефонам компактное состояние при каждом изменении;
    - публикует в Store статус сети и число подключённых устройств (для экрана).
-   Сеть поднимает только одна вкладка пульта (замок в localStorage),
-   иначе две вкладки дрались бы за один peer id.
+   Сеть поднимает только одна вкладка пульта: замок в localStorage с heartbeat
+   (2 с) и TTL (5 с) — замок закрытой вкладки протухает сам. Есть «забрать сеть сюда».
    ========================================================================== */
 (function () {
   'use strict';
@@ -15,9 +15,11 @@
   const TAB_ID = Math.random().toString(36).slice(2);
   const DEVICE_TTL = 15000;      // телефон молчит дольше — считаем отключённым
   const KEEPALIVE_MS = 5000;
+  const LOCK_BEAT_MS = 2000;     // вкладка-владелец обновляет замок
+  const LOCK_TTL_MS = 5000;      // замок без обновлений дольше — считается брошенным
   const ID_RETRIES = 8;          // сколько раз ждём освобождения peer id перед сменой комнаты
 
-  let host = null, room = null, status = 'off', statusInfo = '';
+  let host = null, room = null, status = 'off', statusInfo = '', best = -1;
   let idTaken = 0;
   let lastSent = '';
   const devices = new Map();     // clientId → { teamId, lastSeen }
@@ -28,9 +30,11 @@
   function writeLock() { try { localStorage.setItem(LOCK_KEY, JSON.stringify({ tab: TAB_ID, at: Date.now() })); } catch (e) { /* ignore */ } }
   function haveLock() {
     const l = readLock();
-    if (!l || l.tab === TAB_ID || Date.now() - l.at > 6000) { writeLock(); return true; }
+    if (!l || l.tab === TAB_ID || Date.now() - l.at > LOCK_TTL_MS) { writeLock(); return true; }
     return false;
   }
+  // вкладку закрыли — сразу говорим телефонам «ведущий ушёл» (не ждём таймаута брокера)
+  window.addEventListener('pagehide', () => { if (host) try { host.close(); } catch (e) { /* ignore */ } });
   window.addEventListener('pagehide', () => { const l = readLock(); if (l && l.tab === TAB_ID) try { localStorage.removeItem(LOCK_KEY); } catch (e) { /* ignore */ } });
 
   /* ---------- компактное состояние для телефонов ---------- */
@@ -38,6 +42,7 @@
     const cur = s.phase === 'question' ? s.current : null;
     return {
       t: 'state',
+      rev: s.rev,          // телефон отбрасывает устаревшие снимки (сообщения могут прийти не по порядку)
       room: s.room,
       title: (S.quiz() && S.quiz().title) || 'Своя игра',
       phase: s.phase,
@@ -87,9 +92,9 @@
     let unbound = 0;
     devices.forEach((d, id) => { const t = boundTeam(id); if (t) online.push(t.id); else unbound++; });
     online.sort();
-    const net = { status, devices: devices.size, online, unbound, transport: window.Net ? window.Net.transport : '', info: statusInfo };
+    const net = { status, devices: devices.size, online, unbound, transport: window.Net ? window.Net.transport : '', info: statusInfo, best };
     const cur = s.net || {};
-    const pick = (o) => JSON.stringify([o.status, o.devices, o.online, o.unbound, o.transport, o.info]);
+    const pick = (o) => JSON.stringify([o.status, o.devices, o.online, o.unbound, o.transport, o.info, o.best]);
     if (pick(net) !== pick(cur)) S.dispatch({ type: 'netInfo', net });
     listeners.forEach((fn) => fn());
   }
@@ -112,7 +117,7 @@
   // Правило: 1 телефон = 1 команда. Команда привязана к clientId телефона (team.device в Store).
   const team = (id) => S.get().teams.find((t) => t.id === id);
   const reply = (clientId, msg) => host && host.send(clientId, msg);
-  const joined = (clientId, t) => reply(clientId, { t: 'joined', teamId: t ? t.id : null });
+  const joined = (clientId, t) => reply(clientId, { t: 'joined', teamId: t ? t.id : null, rev: S.get().rev });
 
   function onMessage(clientId, msg) {
     touch(clientId);
@@ -193,7 +198,7 @@
     if (!t || !t.device) return;
     const dev = t.device;
     S.dispatch({ type: 'bindDevice', teamId, device: null });
-    reply(dev, { t: 'joined', teamId: null, reason: 'unbound' });
+    reply(dev, { t: 'joined', teamId: null, reason: 'unbound', rev: S.get().rev });
     pushState(true);
     publishNet();
   }
@@ -201,12 +206,14 @@
   /* ---------- запуск ---------- */
   function ensureRoom() {
     let r = S.get().room;
-    if (!r) { r = U.makeRoom(4); S.dispatch({ type: 'setRoom', room: r }); }
+    if (!r || !S.get().netKey) { r = r || U.makeRoom(4); S.dispatch({ type: 'setRoom', room: r, key: S.get().netKey || U.makeKey(20) }); }
     return r;
   }
 
   function setStatus(st, info) {
-    status = st; statusInfo = info || '';
+    status = st;
+    statusInfo = typeof info === 'string' ? info : (info && info.text) || '';
+    if (info && typeof info === 'object' && 'best' in info) best = info.best;
     if (st === 'online') idTaken = 0;
     if (st === 'id-taken') {
       idTaken++;
@@ -221,9 +228,11 @@
     if (host) host.close();
     devices.clear();
     room = ensureRoom();
-    if (!window.Net) { setStatus('unavailable'); return; }
+    if (!window.Net) { setStatus('unavailable', 'js/net.js не загрузился'); return; }
+    if (!window.Net.available()) { setStatus('unavailable', 'библиотека связи (' + window.Net.transport + ') не загрузилась'); return; }
     host = window.Net.createHost({
       room,
+      key: S.get().netKey,
       onMessage,
       onLeave: (clientId) => { devices.delete(clientId); publishNet(); },
       onStatus: setStatus,
@@ -231,21 +240,33 @@
   }
 
   function newRoom() {
-    S.dispatch({ type: 'setRoom', room: U.makeRoom(4) });
+    S.dispatch({ type: 'setRoom', room: U.makeRoom(4), key: U.makeKey(20) });
     connect();
   }
+
+  /** Сеть держит другая вкладка пульта: отдаём ей, сами молчим. */
+  function release() {
+    if (host) { host.close(true); host = null; }
+    devices.clear();
+    status = 'other-tab'; statusInfo = 'сеть держит другая вкладка пульта';
+    listeners.forEach((fn) => fn());
+  }
+  function tryLock() {
+    const l = readLock();
+    if (l && l.tab !== TAB_ID && Date.now() - l.at <= LOCK_TTL_MS) { if (host || status !== 'other-tab') release(); return; }
+    writeLock();
+    if (!host) connect();
+  }
+  /** Кнопка «забрать сеть сюда». Другая вкладка увидит чужой свежий замок и отпустит. */
+  function takeOver() { writeLock(); if (!host) connect(); listeners.forEach((fn) => fn()); }
 
   let started = false;
   function start() {
     if (started) return;
     started = true;
-    const tryLock = () => {
-      if (!haveLock()) { if (status !== 'other-tab') { status = 'other-tab'; listeners.forEach((fn) => fn()); } return; }
-      if (!host) connect();
-      writeLock();
-    };
     tryLock();
-    setInterval(() => { tryLock(); if (host) { prune(); pushState(true); } }, KEEPALIVE_MS);
+    setInterval(tryLock, LOCK_BEAT_MS); // heartbeat замка
+    setInterval(() => { if (host) { prune(); pushState(true); } }, KEEPALIVE_MS);
     S.subscribe((s) => {
       if (!host) return;
       if (s.room && s.room !== room) connect(); // комнату сменили (например, в другой вкладке)
@@ -257,6 +278,9 @@
     start,
     newRoom,
     unbind,
+    takeOver,
+    get holder() { return !!host; },
+    get best() { return best; },
     isOnline: (teamId) => { const t = team(teamId); return !!(t && t.device && devices.has(t.device)); },
     get status() { return status; },
     get info() { return statusInfo; },

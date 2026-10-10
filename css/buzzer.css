@@ -115,3 +115,9 @@ body.av-open { overflow: hidden; }
 .av-cap { margin: 0; text-align: center; font: 800 14px var(--font-head); text-transform: uppercase; padding-bottom: 6px; }
 .av-zoom { flex: 1; min-width: 120px; accent-color: var(--pink); height: 32px; }
 .av-toast { position: fixed; left: 16px; right: 16px; bottom: 20px; z-index: 80; background: var(--black); color: var(--lime); padding: 12px 14px; border-radius: 12px; font: 800 14px var(--font-head); }
+
+.diag { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 6px 16px; background: var(--yellow); border-bottom: 4px solid var(--black); font: 800 12px/1.3 var(--font-head); text-transform: lowercase; }
+.diag.ok { background: var(--lime); }
+.btn.waiting { background: #d8d4c8; color: #555; box-shadow: 3px 3px 0 var(--black); }
+#host-hint { margin: 0; }
+#room-form input { min-height: 52px; text-transform: uppercase; letter-spacing: .1em; }

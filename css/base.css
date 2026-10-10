@@ -24,6 +24,7 @@
   --font-body: "Manrope", "Unbounded", "Helvetica Neue", Arial, sans-serif;
 }
 
+[hidden] { display: none !important; }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body {

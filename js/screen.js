@@ -23,11 +23,23 @@
   let busy = false, pending = false;
   let lastEvent = 0;
   let scale = 1;
+  let SW = 1920, SH = 1080; // размер сцены в «дизайн-пикселях»
 
-  /* ---------- масштаб сцены 1920×1080 под окно ---------- */
+  /* ---------- сцена: всегда ровно во весь вьюпорт, без полос ----------
+     Масштаб берём по меньшей стороне относительно 1920×1080, а сцену растягиваем
+     до пропорций окна: при 16:10 она выше (1920×1200), при 21:9 — шире.
+     Бегущие строки прижаты к краям экрана, плашки команд — к нижней строке,
+     а вопрос/табло адаптивно занимают всё, что между ними. */
   function fit() {
-    scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    const vw = window.innerWidth, vh = window.innerHeight;
+    scale = Math.min(vw / 1920, vh / 1080);
+    SW = vw / scale; SH = vh / scale;
+    stageEl.style.width = SW + 'px';
+    stageEl.style.height = SH + 'px';
     stageEl.style.setProperty('--s', scale);
+    const cv = $('#confetti');
+    cv.width = Math.round(SW); cv.height = Math.round(SH);
+    cv.style.width = SW + 'px'; cv.style.height = SH + 'px';
   }
   window.addEventListener('resize', fit);
   fit();
@@ -140,24 +152,41 @@
     return i > 0 ? { main: t.slice(0, i).trim(), sub: t.slice(i + 1).trim() } : { main: t, sub: '' };
   }
 
+  /** Номинал в круглом бейдже: кегль от числа знаков, с запасом ≥12% до пунктира. */
+  function fitBadge(span) {
+    if (!span) return;
+    const text = span.textContent.trim();
+    const n = Math.max(1, text.length);
+    const digits = /^\d+$/.test(text);
+    // внутренний диаметр до пунктира ≈ 120 px, рабочая ширина строки ≈ 90 px
+    const size = Math.min(46, Math.floor(90 / (n * (digits ? 0.82 : 0.98))));
+    span.style.fontSize = size + 'px';
+  }
+
   /** Блок «залетай с телефона»: QR, код комнаты, число подключённых телефонов. */
-  function updateJoin(root, s, size) {
+  function updateJoin(root, s) {
     const card = $('.join-card', root);
     if (!card) return false;
     const st = s.net && s.net.status;
     const show = !!(s.room && window.Net && st && st !== 'off' && st !== 'unavailable');
     card.hidden = !show;
     if (!show) return false;
-    const url = window.Net.joinUrl(s.room);
+    // код комнаты — всегда, первым делом (его можно ввести и руками)
+    $('.jc-code', card).textContent = s.room;
+    const n = (s.net && s.net.devices) || 0;
+    $('.jc-dev', card).textContent = st === 'online' ? `📱 ${n} на связи` : st === 'other-tab' ? 'пульт открыт в другой вкладке' : 'ведущий подключается…';
+    let url = '';
+    try { url = window.Net.joinUrl(s.room, s.netKey, s.net && typeof s.net.best === 'number' ? s.net.best : -1); } catch (e) { url = ''; }
     const img = $('.jc-qr', card);
-    const data = window.qrDataUrl ? window.qrDataUrl(url, size) : null;
+    const data = url && window.qrDataUrl ? window.qrDataUrl(url) : null;
     if (data && img.getAttribute('src') !== data) img.src = data;
     img.hidden = !data;
-    $('.jc-code', card).textContent = s.room;
+    card.classList.toggle('no-qr', !data); // QR не вышел — крупно ссылка и код
     const u = $('.jc-url', card);
-    if (u) u.textContent = url.replace(/^https?:\/\//, '').replace(/\?.*$/, '') + ' · код ' + s.room;
-    const n = (s.net && s.net.devices) || 0;
-    $('.jc-dev', card).textContent = st === 'online' ? `📱 ${n} на связи` : 'подключаемся…';
+    if (u) {
+      const short = url.replace(/^https?:\/\//, '').replace(/\?.*$/, '');
+      u.textContent = data ? short + ' · код ' + s.room : (short || 'buzzer.html') + '  →  код ' + s.room;
+    }
     return true;
   }
 
@@ -197,7 +226,7 @@
             ? `<span class="label">в игре:</span>` + s.teams.map((t) => chip(t, '', ` <kbd>${esc(U.keyLabel(t.key))}</kbd>`)).join('')
             : '';
         }
-        const phones = updateJoin(el, s, 340);
+        const phones = updateJoin(el, s);
         el.classList.toggle('with-qr', phones);
         $('.hint', el).textContent = s.teams.length
           ? (phones ? 'жмите кнопку на телефоне или свою клавишу — проверим связь' : 'жмите свою кнопку — проверим, кто на связи')
@@ -236,7 +265,7 @@
     return {
       type: 'board', el, round: r,
       update(st) {
-        el.classList.toggle('with-qr', updateJoin(el, st, 160));
+        el.classList.toggle('with-qr', updateJoin(el, st));
         $$('.cell', el).forEach((cell) => {
           const u = st.used[cell.dataset.key];
           cell.classList.toggle('used', !!u);
@@ -354,7 +383,7 @@
           <span class="slot-badge"></span>
           <span class="slot-buzz"></span>
           <div class="grow"></div>
-          <div class="q-value ${opts.final ? 'final' : ''}">${esc(opts.valueText)}</div>
+          <div class="q-value ${opts.final ? 'final' : ''}"><span class="qv">${esc(opts.valueText)}</span></div>
           <div class="timer idle"><div class="num"></div></div>
         </div>
         <div class="q-prompt-wrap"><div class="pbox">
@@ -372,6 +401,7 @@
       </div>`);
     if (media) $('.q-media', el).appendChild(media.el);
     guardImages(el);
+    fitBadge($('.qv', el));
 
     const timerEl = $('.timer', el), numEl = $('.num', el), tbar = $('.tbar', el), hintEl = $('.press-hint', el);
     let special = null;
@@ -427,7 +457,7 @@
             : `<span class="tag pink q-badge">${word}</span>`;
         }
         if (badge !== sigBadge) { sigBadge = badge; $('.slot-badge', el).innerHTML = badge; }
-        if (opts.special === 'auction' && info.bet) $('.q-value', el).textContent = info.bet;
+        if (opts.special === 'auction' && info.bet && $('.qv', el).textContent !== String(info.bet)) { $('.qv', el).textContent = info.bet; fitBadge($('.qv', el)); }
         // кто нажал баззер
         const bt = info.buzz && teamById(s, info.buzz);
         const buzz = bt ? `<span class="tag team q-buzz" style="${teamVars(bt)}"><span class="emoji-font">${esc(bt.emoji)}</span>${esc(bt.name)} отвечает</span>` : '';
@@ -623,13 +653,13 @@
     cell.classList.add('picked');
     await sleep(950);
     const r = rectInStage(cell);
-    const ghost = h(`<div class="flip-ghost"><span>${esc(cell.textContent)}</span></div>`);
+    const ghost = h(`<div class="flip-ghost" style="width:${SW}px;height:${SH}px"><span>${esc(cell.textContent)}</span></div>`);
     stageEl.appendChild(ghost);
     cell.style.visibility = 'hidden';
     window.Sfx.play('whoosh');
     await ghost.animate([
-      { transform: `translate(${r.x}px, ${r.y}px) rotate(-6deg) scale(${r.w / 1920}, ${r.h / 1080})` },
-      { transform: `translate(${r.x * 0.4}px, ${r.y * 0.4 - 60}px) rotate(4deg) scale(${0.5 + r.w / 3840}, ${0.5 + r.h / 2160})`, offset: 0.55 },
+      { transform: `translate(${r.x}px, ${r.y}px) rotate(-6deg) scale(${r.w / SW}, ${r.h / SH})` },
+      { transform: `translate(${r.x * 0.4}px, ${r.y * 0.4 - 60}px) rotate(4deg) scale(${0.5 + r.w / (2 * SW)}, ${0.5 + r.h / (2 * SH)})`, offset: 0.55 },
       { transform: 'translate(0, 0) rotate(0) scale(1, 1)' },
     ], { duration: 650, easing: 'cubic-bezier(.6, 0, .25, 1)', fill: 'forwards' }).finished;
     board.el.remove();

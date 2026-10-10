@@ -161,3 +161,6 @@ input:focus, select:focus, .btn:focus-visible { outline: 3px solid var(--blue); 
 .mus-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 2px dashed #c9c4b5; }
 .mus-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .mus-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.diag { margin-top: 8px; padding: 8px 10px; border: 2px solid var(--black); border-radius: 10px; background: var(--paper); font: 700 13px/1.35 var(--font-body); display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.diag.warn { background: var(--yellow); }

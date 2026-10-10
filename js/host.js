@@ -72,8 +72,10 @@
       <section class="card">
         <h2>Поехали</h2>
         <p class="muted">1. Открой экран для гостей, перетащи окно на ТВ и нажми там <span class="kbd">F</span>.<br>
-        2. Команды жмут свои клавиши на клавиатуре компа с экраном — там загорится «на связи».<br>
-        3. Жми «Начать».</p>
+        2. Команды сканируют QR на экране телефоном и создают команду (название + аватар). Этот пульт должен оставаться открытым — он и есть «ведущий» для телефонов.<br>
+        3. Проверка: жмите кнопку на телефоне — на экране загорится «на связи».<br>
+        4. Жми «Начать».</p>
+        <p class="muted small">Запасной вариант без телефонов: добавь команду здесь и назначь ей клавишу — команды жмут клавиши на клавиатуре компа с экраном.</p>
         <div class="row">
           <button class="btn big lime" data-act="openScreen">📺 Открыть экран для гостей</button>
           <button class="btn big pink" data-act="startGame" ${s.teams.length ? '' : 'disabled'}>Начать игру →</button>
@@ -336,14 +338,16 @@
   const NET_LABEL = {
     off: ['выкл', ''], connecting: ['подключаемся…', 'orange'], online: ['онлайн', 'lime'],
     offline: ['нет связи', 'pink'], 'id-taken': ['код занят, ждём…', 'orange'],
-    unavailable: ['недоступно', 'pink'], 'other-tab': ['в другой вкладке', ''],
+    unavailable: ['недоступно', 'pink'], 'other-tab': ['в другой вкладке', 'orange'],
   };
   function renderPhones(s) {
     const room = s.room;
-    const st = (window.Remote && window.Remote.status) || 'off';
+    const R = window.Remote;
+    const st = (R && R.status) || 'off';
     const [label, cls] = NET_LABEL[st] || [st, ''];
-    const url = room && window.Net ? window.Net.joinUrl(room) : '';
-    const qr = url && window.qrDataUrl ? window.qrDataUrl(url, 220) : null;
+    const best = s.net && typeof s.net.best === 'number' ? s.net.best : -1;
+    const url = room && window.Net ? window.Net.joinUrl(room, s.netKey, best) : '';
+    const qr = url && window.qrDataUrl ? window.qrDataUrl(url) : null;
     const online = new Set((s.net && s.net.online) || []);
     const total = (s.net && s.net.devices) || 0;
     const unbound = (s.net && s.net.unbound) || 0;
@@ -358,9 +362,15 @@
       const avBtn = t.avatar ? `<button class="btn sm" data-act="avatarReset" data-id="${t.id}" title="вернуть эмодзи">✕ аватар</button>` : '';
       return `<div class="dev-row"><div class="jname">${av(t)}<span>${esc(t.name)}</span></div><div class="row" style="gap:6px;justify-content:flex-end">${state}${btn}${avBtn}</div></div>`;
     }).join('');
-    const warn = st === 'unavailable' || st === 'offline'
-      ? `<div class="banner sample" style="margin:10px 0 0">Сеть для телефонов недоступна${s.net && s.net.info ? ' (' + esc(s.net.info) + ')' : ''}. Играем с клавиатурными баззерами — всё остальное работает.</div>`
-      : st === 'other-tab' ? '<p class="muted small">Сеть для телефонов уже держит другая открытая вкладка пульта.</p>' : '';
+    // диагностика: кто держит сеть и что с сервером связи
+    const holder = st === 'other-tab'
+      ? `<div class="diag warn">🔁 Сеть держит другая вкладка пульта. <button class="btn sm" data-act="takeOver">забрать сеть сюда</button></div>`
+      : `<div class="diag">✅ Эта вкладка держит сеть${window.Net ? ' · транспорт ' + esc(window.Net.transport) : ''}</div>`;
+    const info = (R && R.info) || (s.net && s.net.info) || '';
+    const server = st === 'online' ? `<div class="diag">🛰 Сервер связи: ${esc(info || 'подключено')}</div>`
+      : st === 'unavailable' ? `<div class="diag warn">⛔ ${esc(info || 'библиотека связи не загрузилась')}. Играем с клавиатурными баззерами.</div>`
+        : st === 'other-tab' ? ''
+          : `<div class="diag warn">⏳ ${esc(info || 'подключаемся к серверу связи…')}</div>`;
     return `
       <section class="card">
         <h2>Телефоны <span class="pill ${cls}">${label}</span><span class="sp muted small">${total} 📱</span></h2>
@@ -372,7 +382,7 @@
           </div>
           ${qr ? `<img class="qr" src="${qr}" alt="QR-код для телефона" width="110" height="110">` : ''}
         </div>
-        ${warn}
+        ${holder}${server}
         <div class="devs">${rows}${unbound ? `<div class="dev-row"><span class="muted">телефонов без команды</span><span class="dev-n">📱×${unbound}</span></div>` : ''}</div>
         <p class="muted small" style="margin:8px 0 0">1 телефон = 1 команда. «Отвязать» — если телефон сел или потерялся: баллы останутся, команду можно восстановить с другого телефона.</p>
         <button class="btn sm ${armedKey === 'newRoom' ? 'danger' : ''}" style="margin-top:10px" data-act="newRoom">${armedKey === 'newRoom' ? 'Точно? Телефоны отвалятся' : 'новая комната'}</button>
@@ -527,6 +537,7 @@
       case 'unbind':
         if (confirmTwice('unbind-' + id, 'Отвязать телефон? Баллы команды останутся. Жми ещё раз')) window.Remote.unbind(id);
         break;
+      case 'takeOver': window.Remote.takeOver(); render(); break;
       case 'newRoom':
         if (confirmTwice('newRoom', 'Новый код комнаты — телефонам придётся сканировать заново. Жми ещё раз')) window.Remote.newRoom();
         break;

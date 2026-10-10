@@ -59,6 +59,17 @@
   };
 
   $('room-code').textContent = room || '—';
+  // секрет комнаты (k) и брокер (b) приходят в QR-ссылке; без k телефон найдёт его по коду через «маяк» пульта
+  let roomKey = params.get('k') || '';
+  if (!roomKey) { try { roomKey = localStorage.getItem('svoyak:k:' + room) || ''; } catch (e) { /* ignore */ } }
+  const brokerHint = params.has('b') ? parseInt(params.get('b'), 10) : 0;
+  let netInfo = null;          // диагностика от транспорта
+  let pendingCreate = null;    // заявка, отправим, когда появится ведущий
+  let joiningAt = 0;
+  let joinedRev = -1;
+  let lastHello = 0;
+  const dbg = [];               // последние сообщения (для отладки: window.__buzzer)
+  window.__buzzer = { dbg, get state() { return state; }, get myTeam() { return myTeam; }, get net() { return netStatus; } };
 
   /* ---------- экран не гаснет ---------- */
   let wakeLock = null;
@@ -76,22 +87,33 @@
   function startNet() {
     if (!room) return;
     client = window.Net.createClient({
-    room, clientId,
-    onStatus(st) {
+    room, clientId, key: roomKey, broker: brokerHint,
+    onKey(k) { roomKey = k; try { localStorage.setItem('svoyak:k:' + room, k); } catch (e) { /* ignore */ } },
+    onStatus(st, info) {
       netStatus = st;
-      if (st === 'online') client.send({ t: 'hello', teamId: myTeam });
+      netInfo = info || null;
+      if (st === 'online') {
+        client.send({ t: 'hello', teamId: myTeam });
+        // нажали «создать», пока ведущего не было — отправляем заявку сейчас
+        if (pendingCreate && !myTeam) { client.send(pendingCreate); joining = true; pendingCreate = null; notice = ''; }
+      }
       render();
     },
     onMessage(m) {
+      if (m.t !== 'pong' && dbg.length < 200) dbg.push([Date.now() % 100000, m.t, m.rev, m.teamId || '']);
       if (m.t === 'state') {
+        if (state && typeof m.rev === 'number' && typeof state.rev === 'number' && m.rev < state.rev) return; // устаревший снимок
         if (!state || state.qid !== m.qid) $('big').classList.remove('down');
         // баззер снова открыт (кто-то ошибся или ведущий сбросил) — можно жать ещё раз
         if (state && state.winner && !m.winner) { pressedQid = null; $('big').classList.remove('down'); }
         state = m;
-        if (myTeam && !m.teams.some((t) => t.id === myTeam)) { myTeam = null; save(); } // команду удалили
+        // команду удалили на пульте (только если снимок новее, чем наш «joined»)
+        if (myTeam && !m.teams.some((t) => t.id === myTeam) && (typeof m.rev !== 'number' || m.rev > joinedRev)) { myTeam = null; save(); }
         const me = myTeam && m.qid && m.winner === myTeam;
         if (me && wonQid !== m.qid) celebrate(m.qid);
       } else if (m.t === 'joined') {
+        if (typeof m.rev === 'number' && m.rev < joinedRev) return; // ответ на старый запрос
+        joinedRev = typeof m.rev === 'number' ? m.rev : joinedRev;
         joining = false;
         if (m.teamId) { myTeam = m.teamId; save(); keepAwake(); notice = ''; }
         else {
@@ -200,7 +222,14 @@
     window.Sfx.unlock();
     const name = $('team-name').value.trim();
     if (!name) { $('team-name').focus(); setFlash('name', 2000); render(); return; }
-    if (!client || !client.send({ t: 'create', name, emoji: pickedEmoji, avatar: pendingAvatar })) { setFlash('offline', 2000); render(); return; }
+    const msg = { t: 'create', name, emoji: pickedEmoji, avatar: pendingAvatar };
+    if (netStatus !== 'online' || !client || !client.send(msg)) {
+      // связи с ведущим нет — запоминаем заявку и отправим сами, как только он появится
+      pendingCreate = msg;
+      notice = 'Заявка сохранена — отправим, как только ведущий появится на связи.';
+      render();
+      return;
+    }
     joining = true;
     render();
   }
@@ -214,7 +243,14 @@
   });
 
   /* ---------- отрисовка ---------- */
-  const NET_TEXT = { connecting: 'подключаемся…', online: 'на связи', offline: 'нет сети', 'no-host': 'ищем ведущего…', unavailable: 'сеть недоступна' };
+  const NET_TEXT = { connecting: 'ищем сервер связи…', online: 'на связи', offline: 'нет сети', 'no-host': 'ведущий не найден', unavailable: 'библиотека связи не загрузилась' };
+  function renderDiag() {
+    const server = netStatus === 'online' || netStatus === 'no-host';
+    const hostOk = netStatus === 'online';
+    const b = netInfo && netInfo.broker ? ' (' + netInfo.broker + ')' : '';
+    $('diag').innerHTML = `<span>${server ? '✅' : '⏳'} сервер связи: ${server ? 'подключено' + b : 'нет'}</span><span>${hostOk ? '✅' : '⏳'} ведущий: ${hostOk ? 'найден' : 'не найден'}</span>`;
+    $('diag').classList.toggle('ok', hostOk);
+  }
   let teamsSig = '';
 
   function render() {
@@ -222,6 +258,17 @@
     net.className = 'net ' + (netStatus === 'online' ? 'online' : (netStatus === 'connecting' ? '' : 'bad'));
     net.querySelector('span').textContent = NET_TEXT[netStatus] || netStatus;
     if (flash && Date.now() > flash.until) flash = null;
+    // ведущий не ответил на заявку — не оставляем кнопку висеть
+    if (joining && !joiningAt) joiningAt = Date.now();
+    if (!joining) joiningAt = 0;
+    if (joining && Date.now() - joiningAt > 9000) {
+      joining = false; joiningAt = 0; notice = 'Ведущий не ответил. Нажми ещё раз.';
+      if (client) client.send({ t: 'hello' }); // вдруг команда уже создана, а ответ потерялся — пульт напомнит
+    }
+    // на экране входа периодически «здороваемся»: пульт вернёт нашу команду, если она есть
+    if (!myTeam && netStatus === 'online' && client && Date.now() - lastHello > 6000) { lastHello = Date.now(); client.send({ t: 'hello' }); }
+    renderDiag();
+    $('no-room').hidden = !!room;
 
     const team = state && myTeam && state.teams.find((t) => t.id === myTeam);
     const showJoin = !team;
@@ -243,8 +290,12 @@
     $('join-msg').hidden = !msg;
     $('join-msg').textContent = msg;
     const c = $('create');
-    c.disabled = joining || netStatus !== 'online';
+    const waiting = netStatus !== 'online';
+    c.disabled = joining;
+    c.classList.toggle('waiting', waiting && !joining);
+    $('host-hint').hidden = !waiting;
     c.textContent = joining ? 'ПОДКЛЮЧАЕМ…'
+      : waiting ? (pendingCreate ? 'ЖДЁМ ВЕДУЩЕГО… ЗАЯВКА В ОЧЕРЕДИ' : 'ЖДЁМ ВЕДУЩЕГО…')
       : flash && flash.kind === 'name' ? 'ВПИШИ НАЗВАНИЕ'
         : flash && flash.kind === 'offline' ? 'НЕТ СВЯЗИ С ВЕДУЩИМ'
           : 'СОЗДАТЬ И ИГРАТЬ →';
@@ -298,6 +349,17 @@
     if (cls) btn.classList.add(cls);
     $('status').textContent = status;
   }
+
+  // ручной ввод кода комнаты (если открыли buzzer.html без QR)
+  $('room-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const code = $('room-input').value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+    if (!code) return;
+    const u = new URL(location.href);
+    u.searchParams.set('room', code);
+    u.searchParams.delete('k');
+    location.href = u.toString();
+  });
 
   setInterval(render, 250);
   document.addEventListener('visibilitychange', () => {

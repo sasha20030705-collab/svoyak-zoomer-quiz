@@ -164,3 +164,6 @@ input:focus, select:focus, .btn:focus-visible { outline: 3px solid var(--blue); 
 
 .diag { margin-top: 8px; padding: 8px 10px; border: 2px solid var(--black); border-radius: 10px; background: var(--paper); font: 700 13px/1.35 var(--font-body); display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .diag.warn { background: var(--yellow); }
+
+.timeup { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; padding: 10px 12px; border: 3px solid var(--black); border-radius: 12px; background: var(--yellow); font: 800 15px var(--font-head); animation: blink 1s steps(2) infinite; }
+.timeup[hidden] { display: none; }

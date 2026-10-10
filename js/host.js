@@ -182,6 +182,7 @@
       html += `
         <section class="card">
           <h2>Кто ответил? ${bz ? `<span class="pill" style="background:${bz.color};color:${U.textOn(bz.color)}">первые: ${esc(bz.name)}</span>` : ''}</h2>
+          ${bz ? `<div class="timeup" id="timeup" hidden>⏰ Время вышло — засчитай неверно? <button class="btn sm pink" data-act="judge" data-id="${bz.id}" data-ok="0">✗ ${esc(bz.name)} −${val}</button></div>` : ''}
           <div class="judge">${order.map((t) => {
             const out = cur.wrong.includes(t.id);
             return `<div class="jrow ${s.buzzer.winner === t.id ? 'buzzed' : ''} ${cur.owner === t.id ? 'owner' : ''} ${out ? 'out' : ''}" style="${tv(t)}">
@@ -270,11 +271,14 @@
       const t = s.timer;
       html += `
         <section class="card">
-          <h2>Таймер</h2>
+          <h2>Таймер ${t.kind === 'answer' ? `<span class="pill pink">на ответ: ${esc((teamById(s, t.teamId) || {}).name || '')}</span>` : ''}</h2>
           <div class="row">
             <div class="timer-big" id="timer-num">${Math.ceil(U.timerRemaining(t) / 1000)}</div>
             <div class="grow"></div>
-            <select data-input="duration" id="dur" aria-label="длительность">${[10, 15, 20, 30, 45, 60, 90].map((d) => `<option value="${d}" ${d === t.duration ? 'selected' : ''}>${d} с</option>`).join('')}</select>
+            <label class="small muted">вопрос <select data-input="duration" id="dur" aria-label="время на вопрос">${[10, 15, 20, 30, 45, 60, 90].map((d) => `<option value="${d}" ${d === (t.kind === 'answer' && t.saved ? t.saved.duration : t.duration) ? 'selected' : ''}>${d} с</option>`).join('')}</select></label>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <label class="small muted">время на ответ после баззера <select data-input="answerSeconds" id="ans-sec" aria-label="время на ответ">${[10, 15, 20, 30].map((d) => `<option value="${d}" ${d === (s.answerSeconds || 15) ? 'selected' : ''}>${d} с</option>`).join('')}</select></label>
           </div>
           <div class="row" style="margin-top:10px">
             <button class="btn ${t.running ? 'pink' : 'lime'} grow" data-act="timerToggle">${t.running ? '⏸ Пауза' : '▶ Старт'}</button>
@@ -462,6 +466,9 @@
     const rem = U.timerRemaining(S.get().timer);
     el.textContent = Math.ceil(rem / 1000);
     el.classList.toggle('low', rem <= 5000);
+    // отсчёт на ответ кончился — подсвечиваем подсказку (баллы сами не списываются: решает ведущий)
+    const s = S.get(), tu = document.getElementById('timeup');
+    if (tu) tu.hidden = !(s.timer.kind === 'answer' && s.timer.running && rem === 0 && s.buzzer.winner);
   }
   setInterval(tickTimer, 100);
 
@@ -558,6 +565,7 @@
     else if (kind === 'bet') d({ type: 'setBet', bet: el.value });
     else if (kind === 'finalBet') { if (el.value !== '') d({ type: 'finalBet', teamId: id, bet: el.value }); }
     else if (kind === 'duration') d({ type: 'timerDuration', seconds: +el.value });
+    else if (kind === 'answerSeconds') d({ type: 'answerSeconds', seconds: +el.value });
   });
 
   // громкость — по отпусканию ползунка (иначе перерисовка сорвёт перетаскивание)

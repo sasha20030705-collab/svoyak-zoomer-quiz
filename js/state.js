@@ -90,6 +90,19 @@
   }
 
   /* ---------- начальное состояние ---------- */
+  /** Длительность «общего» таймера вопроса (во время отсчёта на ответ она лежит в saved). */
+  function qDur(s) {
+    const t = s.timer || {};
+    return t.kind === 'answer' && t.saved ? t.saved.duration : (t.duration || 30);
+  }
+  /** Вернуть приостановленный таймер вопроса после отсчёта на ответ. */
+  function restoreQuestionTimer(s) {
+    const t = s.timer;
+    if (t && t.kind === 'answer') {
+      const sv = t.saved || { duration: 30, remaining: 30000 };
+      s.timer = { duration: sv.duration, running: false, endsAt: 0, remaining: sv.remaining, kind: 'question' };
+    }
+  }
   function freshTimer(duration) {
     const d = duration || 30;
     return { duration: d, running: false, endsAt: 0, remaining: d * 1000 };
@@ -104,6 +117,7 @@
       used: {},                  // cellKey → {by: teamId|null}
       current: null,             // открытый вопрос
       timer: freshTimer(30),
+      answerSeconds: 15,         // время на ответ после баззера (таймер стартует сам)
       buzzer: { winner: null, at: 0 },
       final: { stage: 'intro', bets: {}, results: {} },
       history: [],               // снимки для undo
@@ -215,7 +229,7 @@
         s.round = Math.max(0, Math.min(a.round, (QUIZ ? QUIZ.rounds.length : 1) - 1));
         s.current = null;
         s.buzzer = { winner: null, at: 0 };
-        s.timer = freshTimer(s.timer.duration);
+        s.timer = freshTimer(qDur(s));
         emit(s, { kind: 'round', round: s.round });
         break;
 
@@ -235,7 +249,7 @@
           wrong: [],        // кто уже ошибся
           winner: null,     // кто ответил верно
         };
-        s.timer = freshTimer(s.timer.duration);
+        s.timer = freshTimer(qDur(s));
         s.buzzer = { winner: null, at: 0 };
         emit(s, { kind: 'select', key: s.current.key, special });
         break;
@@ -268,6 +282,7 @@
           t.score -= d;
           if (!cur.wrong.includes(t.id)) cur.wrong.push(t.id);
           s.buzzer = { winner: null, at: 0 };   // право ответа переходит дальше
+          restoreQuestionTimer(s);              // отсчёт на ответ стоп; следующий нажавший получит новый
           emit(s, { kind: 'wrong', teamId: t.id, delta: -d });
         }
         break;
@@ -287,7 +302,7 @@
         s.phase = 'board';
         s.current = null;
         s.buzzer = { winner: null, at: 0 };
-        s.timer = freshTimer(s.timer.duration);
+        s.timer = freshTimer(qDur(s));
         emit(s, { kind: 'board' });
         break;
 
@@ -309,10 +324,13 @@
         pauseTimer(s);
         break;
       case 'timerReset':
-        s.timer = freshTimer(s.timer.duration);
+        s.timer = freshTimer(qDur(s));
         break;
       case 'timerDuration':
         s.timer = freshTimer(Math.max(5, Math.min(300, Number(a.seconds) || 30)));
+        break;
+      case 'answerSeconds':
+        s.answerSeconds = Math.max(5, Math.min(120, Number(a.seconds) || 15));
         break;
 
       /* --- баззер --- */
@@ -324,12 +342,20 @@
         if (s.phase !== 'question' || !cur || cur.stage !== 'question' || cur.special) break;
         if (s.buzzer.winner || cur.wrong.includes(t.id)) break;
         s.buzzer = { winner: t.id, at: now() };
-        pauseTimer(s); // как в «Своей игре»: нажали — время стоп
+        // таймер вопроса — на паузу (запоминаем остаток), и сразу стартует отсчёт на ответ этой команды
+        pauseTimer(s);
+        const sec = s.answerSeconds || 15;
+        s.timer = {
+          duration: sec, running: true, endsAt: now() + sec * 1000, remaining: sec * 1000,
+          kind: 'answer', teamId: t.id,
+          saved: { duration: qDur(s), remaining: s.timer.kind === 'answer' ? (s.timer.saved || {}).remaining : s.timer.remaining },
+        };
         emit(s, { kind: 'buzz', teamId: t.id });
         break;
       }
       case 'buzzReset':
         s.buzzer = { winner: null, at: 0 };
+        restoreQuestionTimer(s);
         emit(s, { kind: 'buzzReset' });
         break;
 
@@ -365,14 +391,14 @@
         s.phase = 'final';
         s.current = null;
         s.final = { stage: 'intro', bets: {}, results: {} };
-        s.timer = freshTimer(s.timer.duration);
+        s.timer = freshTimer(qDur(s));
         s.buzzer = { winner: null, at: 0 };
         emit(s, { kind: 'final' });
         break;
       case 'finalStage':
         s.final.stage = a.stage; // intro | bets | question | answer
         if (a.stage !== 'question') pauseTimer(s);
-        if (a.stage === 'question') s.timer = freshTimer(s.timer.duration);
+        if (a.stage === 'question') s.timer = freshTimer(qDur(s));
         emit(s, { kind: 'finalStage', stage: a.stage });
         break;
       case 'finalBet':
@@ -412,6 +438,8 @@
         const fresh = initialState(teams);
         fresh.room = s.room;
         fresh.netKey = s.netKey;
+        fresh.answerSeconds = s.answerSeconds || 15;
+        fresh.timer = freshTimer(qDur(s));
         fresh.net = s.net;
         fresh.music = s.music || fresh.music;
         fresh.rev = s.rev;

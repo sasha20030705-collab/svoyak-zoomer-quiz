@@ -485,7 +485,10 @@
         tbar.style.transform = `scaleX(${frac})`;
         tbar.style.opacity = started && lastStage === 'question' ? 1 : 0;
         tbar.classList.toggle('low', rem <= 5000);
-        if (media && media.progress) media.progress(started ? 1 - frac : 0, lastStage === 'answer');
+        // зум/размытие идут по таймеру ВОПРОСА; во время отсчёта на ответ — замирают
+        let mp = started ? 1 - frac : 0;
+        if (t.kind === 'answer' && t.saved) mp = 1 - t.saved.remaining / (t.saved.duration * 1000 || 1);
+        if (media && media.progress) media.progress(Math.max(0, Math.min(1, mp)), lastStage === 'answer');
       },
       onTimeUp() {
         timerEl.classList.remove('zero'); void timerEl.offsetWidth; timerEl.classList.add('zero');

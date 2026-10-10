@@ -1,34 +1,40 @@
 /* ==========================================================================
-   Сетевой транспорт «пульт ↔ телефоны». Ничего не знает об игре —
+   Сетевой транспорт «пульт ↔ телефоны/экран». Ничего не знает об игре —
    только доставляет JSON-сообщения. Интерфейс (одинаковый для всех транспортов):
 
      const host = Net.createHost({ room, key, onMessage(clientId, msg), onLeave(clientId), onStatus(status, info) })
-       host.broadcast(msg)        — всем подключённым телефонам
-       host.send(clientId, msg)   — одному телефону
-       host.close()
-     const client = Net.createClient({ room, key, broker, clientId, onMessage(msg), onStatus(status, info), onKey(key) })
+       host.broadcast(msg)        — всем телефонам
+       host.send(clientId, msg)   — одному клиенту (телефону или экрану)
+       host.close(silent)
+     const client = Net.createClient({ room, key, clientId, onMessage(msg), onStatus(status, info), onKey(key) })
        client.send(msg) → true/false
-       client.reconnect()          — принудительно (например, после разблокировки экрана)
+       client.reconnect()          — переподключиться ко всем серверам
+       client.info()               — живая диагностика
        client.close()
 
-   status: 'connecting' (нет сервера связи) | 'no-host' (сервер есть, ведущего нет)
+   status: 'connecting' (нет ни одного сервера связи) | 'no-host' (сервер есть, пульт не отвечает)
            | 'online' | 'offline' | 'id-taken' | 'unavailable' (библиотека не загрузилась)
-   info:   { brokers: [{name, state}], text } — для диагностики на пульте/телефоне
+   info:   { brokers: [{name, state, err, lastAt}], text, best, lastIn, via, waitSec }
 
-   Транспорты (все библиотеки — локально в js/vendor, никаких CDN):
-     mqtt  — MQTT поверх WSS через публичные брокеры, по умолчанию.
-             Топики svoyak/<секрет>/…; секрет (k) — в QR-ссылке. Без k телефон
-             находит его по «маяку» svoyak/lobby/<код>, который публикует пульт.
-             Пульт сидит сразу на всех доступных брокерах, телефон начинает с ?b=.
-     peer  — PeerJS (WebRTC) через PeerJS cloud: ?net=peer (запасной).
-     local — BroadcastChannel внутри одного браузера (для тестов): ?net=local.
+   Транспорты (всё локально, никаких CDN):
+     mqtt         — публичные MQTT-брокеры по WSS (по умолчанию на GitHub Pages).
+                    И пульт, и КАЖДЫЙ клиент держат соединения со ВСЕМИ брокерами сразу:
+                    общий брокер найдётся, даже если у кого-то часть из них недоступна.
+                    Сообщения дублируются по брокерам и отсеиваются по id.
+     local-server — node server.js в локальной сети (без интернета): SSE + POST,
+                    те же топики. Включается сам, если страницу отдал server.js.
+     peer         — PeerJS (WebRTC): ?net=peer (запасной).
+     local        — BroadcastChannel внутри одного браузера (для тестов): ?net=local.
+   Топики: svoyak/<k>/up/<clientId> (к пульту), svoyak/<k>/down (всем телефонам),
+           svoyak/<k>/to/<clientId> (лично), svoyak/<k>/host (retained: пульт онлайн?),
+           svoyak/lobby/<код> (retained «маяк» с k — для входа по коду без QR).
    ========================================================================== */
 (function () {
   'use strict';
 
   const PREFIX = 'svoyak-';
   const CLIENT_PING_MS = 4000;     // клиент пингует хоста
-  const CLIENT_WATCHDOG_MS = 20000; // нет вестей от хоста столько — переподключаемся
+  const CLIENT_WATCHDOG_MS = 20000; // нет вестей от хоста столько — «ведущий не найден»
   const noop = () => {};
 
   /* ---------------------------------------------------------------- PeerJS */
@@ -174,211 +180,284 @@
     },
   };
 
-  /* ------------------------------------------------------------ MQTT */
+
+  /* ===================================================== публикация-подписка */
   const BROKERS = [
     { name: 'emqx', url: 'wss://broker.emqx.io:8084/mqtt' },
     { name: 'hivemq', url: 'wss://broker.hivemq.com:8884/mqtt' },
     { name: 'mosquitto', url: 'wss://test.mosquitto.org:8081/mqtt' },
+    // порт 443 — на случай, если оператор режет «нестандартные» порты
+    { name: 'shiftr', url: 'wss://public.cloud.shiftr.io:443', auth: { username: 'public', password: 'public' } },
   ];
   const TOPIC = 'svoyak/';
-  const rnd = (n) => Math.random().toString(36).slice(2, 2 + n);
-  const parse = (payload) => { try { return JSON.parse(String(payload)); } catch (e) { return null; } };
+  const rnd = (n) => Math.random().toString(36).slice(2, 2 + n) + Math.random().toString(36).slice(2, 2 + n);
+  const parse = (p) => { try { return JSON.parse(typeof p === 'string' ? p : String(p)); } catch (e) { return null; } };
+
+  /** Отсев дублей (одно сообщение приходит через несколько брокеров). */
+  function Dedupe(max = 400) {
+    const set = new Set(), q = [];
+    return { seen(id) { if (!id) return false; if (set.has(id)) return true; set.add(id); q.push(id); if (q.length > max) set.delete(q.shift()); return false; } };
+  }
+
+  /** Линк к одному MQTT-брокеру. */
+  function mqttLink(def, { will, onMessage, onState }) {
+    const L = { name: def.name, state: 'connecting', err: '', lastAt: 0, topics: [], onconnect: noop };
+    let cl = null, t0 = 0;
+    L.open = () => {
+      clearTimeout(t0);
+      try { if (cl) cl.end(true); } catch (e) { /* ignore */ }
+      L.state = 'connecting'; onState();
+      const opts = Object.assign({ clientId: 'svoyak-' + rnd(6), keepalive: 30, reconnectPeriod: 5000, connectTimeout: 5000, clean: true }, def.auth || {});
+      if (will) opts.will = { topic: will.topic, payload: JSON.stringify({ d: will.payload }), qos: 1, retain: !!will.retain };
+      const my = window.mqtt.connect(def.url, opts);
+      cl = my;
+      t0 = setTimeout(() => { if (cl === my && L.state === 'connecting') { L.state = 'fail'; L.err = L.err || 'нет ответа 5 с'; onState(); } }, 5000);
+      my.on('connect', () => {
+        if (cl !== my) return;
+        clearTimeout(t0);
+        L.state = 'ok'; L.err = ''; L.lastAt = Date.now();
+        if (L.topics.length) my.subscribe(L.topics, { qos: 1 });
+        onState(); L.onconnect();
+      });
+      my.on('message', (topic, payload) => { if (cl !== my) return; L.lastAt = Date.now(); const m = parse(payload); if (m) onMessage(L, topic, m); });
+      const down = (e) => { if (cl !== my) return; if (e && e.message) L.err = e.message.slice(0, 60); if (L.state !== 'fail') { L.state = 'fail'; onState(); } };
+      my.on('error', down); my.on('offline', () => down()); my.on('close', () => down());
+      my.on('reconnect', () => { if (cl === my && L.state !== 'ok') { L.state = 'connecting'; onState(); } });
+    };
+    L.setTopics = (topics) => {
+      const old = L.topics; L.topics = topics;
+      if (cl && L.state === 'ok') {
+        const rm = old.filter((x) => !topics.includes(x));
+        if (rm.length) cl.unsubscribe(rm);
+        cl.subscribe(topics, { qos: 1 });
+      }
+    };
+    L.publish = (topic, obj, o = {}) => {
+      if (!cl || L.state !== 'ok') return false;
+      try { cl.publish(topic, JSON.stringify(obj), { qos: o.qos == null ? 0 : o.qos, retain: !!o.retain }); return true; } catch (e) { return false; }
+    };
+    L.close = () => { clearTimeout(t0); try { if (cl) cl.end(true); } catch (e) { /* ignore */ } cl = null; };
+    return L;
+  }
+
+  /** Линк к локальному server.js: SSE (приём) + POST (отправка). */
+  function sseLink(def, { will, onMessage, onState }) {
+    const L = { name: def.name, state: 'connecting', err: '', lastAt: 0, topics: [], onconnect: noop };
+    let es = null;
+    function reopen() {
+      try { if (es) es.close(); } catch (e) { /* ignore */ }
+      es = null;
+      if (!L.topics.length) return;
+      const q = new URLSearchParams({ t: L.topics.join(',') });
+      if (will) q.set('will', JSON.stringify({ topic: will.topic, payload: { d: will.payload }, retain: !!will.retain }));
+      const my = new EventSource(def.base + '/relay/sub?' + q.toString());
+      es = my;
+      my.onopen = () => { if (es !== my) return; L.state = 'ok'; L.err = ''; L.lastAt = Date.now(); onState(); L.onconnect(); };
+      my.onmessage = (e) => { if (es !== my) return; L.lastAt = Date.now(); const m = parse(e.data); if (m && m.topic) onMessage(L, m.topic, m.payload); };
+      my.onerror = () => { if (es !== my) return; if (L.state === 'ok') { L.state = 'connecting'; L.err = 'обрыв, переподключаемся'; onState(); } };
+    }
+    L.open = () => { L.state = 'connecting'; onState(); reopen(); };
+    L.setTopics = (t) => { L.topics = t; if (L.state === 'ok' || es) reopen(); };
+    L.publish = (topic, obj, o = {}) => {
+      if (L.state !== 'ok') return false;
+      try {
+        fetch(def.base + '/relay/pub', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topic, payload: obj, retain: !!o.retain }), keepalive: true })
+          .catch(() => { L.err = 'не отправилось'; });
+        return true;
+      } catch (e) { return false; }
+    };
+    L.close = () => { try { if (es) es.close(); } catch (e) { /* ignore */ } es = null; };
+    return L;
+  }
+
+  function linkInfo(links) { return links.map((l) => ({ name: l.name, state: l.state, err: l.err, lastAt: l.lastAt })); }
+
+  /** Пульт поверх набора линков. */
+  function pubsubHost(defs, makeLink, { room, key, onMessage = noop, onStatus = noop }) {
+    const base = TOPIC + key + '/';
+    const hid = 'h' + rnd(5);
+    let seq = 0, closed = false, lastIn = null;
+    const wrap = (d) => ({ i: hid + ':' + (++seq), d });
+    const dd = Dedupe();
+    const will = { topic: base + 'host', payload: { online: false }, retain: true };
+    const links = defs.map((def) => makeLink(def, { will, onMessage: recv, onState: report }));
+
+    function recv(l, topic, m) {
+      if (topic.indexOf(base + 'up/') !== 0 || !m || !m.d) return;
+      if (dd.seen(m.i)) return;
+      const cid = topic.slice(base.length + 3);
+      lastIn = { t: m.d.t, cid, broker: l.name, at: Date.now() };
+      onMessage(cid, m.d);
+    }
+    function presence(l) {
+      l.publish(base + 'host', { d: { online: true, at: Date.now() } }, { qos: 1, retain: true });
+      l.publish(TOPIC + 'lobby/' + room, { d: { k: key, at: Date.now() } }, { retain: true }); // маяк для входа по коду
+    }
+    function report() {
+      if (closed) return;
+      const ok = links.filter((l) => l.state === 'ok');
+      const bad = links.filter((l) => l.state !== 'ok');
+      const text = ok.length
+        ? 'подключено к ' + ok.map((l) => l.name).join(', ') + (bad.length ? ' · не отвечают: ' + bad.map((l) => l.name + (l.err ? ' (' + l.err + ')' : '')).join(', ') : '')
+        : 'серверы связи не отвечают: ' + links.map((l) => l.name + (l.err ? ' (' + l.err + ')' : '')).join(', ');
+      onStatus(ok.length ? 'online' : (links.every((l) => l.state === 'fail') ? 'offline' : 'connecting'),
+        { brokers: linkInfo(links), text, best: ok.length ? links.indexOf(ok[0]) : -1, lastIn });
+    }
+    links.forEach((l) => { l.topics = [base + 'up/+']; l.onconnect = () => presence(l); l.open(); });
+    report();
+    const beat = setInterval(() => { if (!closed) { links.forEach((l) => { if (l.state === 'ok') presence(l); }); report(); } }, 2500);
+
+    return {
+      broadcast(msg) { const w = wrap(msg); links.forEach((l) => l.publish(base + 'down', w)); },
+      // личное — через все живые брокеры: клиент слушает на всех доступных ему
+      send(clientId, msg) { const w = wrap(msg); links.forEach((l) => l.publish(base + 'to/' + clientId, w, { qos: 1 })); },
+      close(silent) {
+        closed = true; clearInterval(beat);
+        links.forEach((l) => { if (!silent) l.publish(base + 'host', { d: { online: false } }, { qos: 1, retain: true }); setTimeout(() => l.close(), 150); });
+      },
+    };
+  }
+
+  /** Телефон/экран поверх набора линков: подписан на ВСЕХ доступных серверах сразу. */
+  function pubsubClient(defs, makeLink, { room, key, clientId, onMessage = noop, onStatus = noop, onKey = noop }) {
+    let k = key || '';
+    const fromUrl = !!key;
+    const cw = 'c' + rnd(5);
+    let seq = 0, closed = false, hostAlive = false, lastHeard = 0, waitFrom = Date.now(), via = '';
+    const wrap = (d) => ({ i: cw + ':' + (++seq), d });
+    const dd = Dedupe();
+    const base = () => TOPIC + k + '/';
+    const topics = () => (k ? [base() + 'down', base() + 'to/' + clientId, base() + 'host'] : [TOPIC + 'lobby/' + room]);
+    const links = defs.map((def) => makeLink(def, { onMessage: recv, onState: report }));
+
+    function recv(l, topic, m) {
+      const d = m && m.d;
+      if (!d) return;
+      if (topic === TOPIC + 'lobby/' + room) {
+        if (d.k && d.k !== k) { k = String(d.k); onKey(k); links.forEach((x) => x.setTopics(topics())); setTimeout(probe, 300); }
+        return;
+      }
+      if (!k || topic.indexOf(base()) !== 0) return;
+      if (topic === base() + 'host') {
+        // retained-флаг может быть устаревшим: «найден» — только после настоящего ответа пульта
+        if (d.online === false) { if (hostAlive) { hostAlive = false; waitFrom = Date.now(); report(); } } else probe();
+        return;
+      }
+      if (dd.seen(m.i)) return;
+      lastHeard = Date.now(); via = l.name;
+      if (!hostAlive) { hostAlive = true; report(); }
+      onMessage(d);
+    }
+    function send(msg) {
+      if (!k) return false;
+      const w = wrap(msg);
+      let ok = false;
+      links.forEach((l) => { if (l.publish(base() + 'up/' + clientId, w, { qos: 1 })) ok = true; });
+      return ok;
+    }
+    function probe() { if (!closed) send({ t: 'ping' }); }
+    function info() {
+      const ok = links.filter((l) => l.state === 'ok');
+      return {
+        brokers: linkInfo(links), server: ok.length > 0, host: hostAlive, via,
+        broker: ok.map((l) => l.name).join(', '),
+        waitSec: hostAlive ? 0 : Math.round((Date.now() - waitFrom) / 1000),
+        key: k ? k.slice(0, 4) + '…' : '(ищем по коду)',
+        text: ok.length ? 'серверы: ' + ok.map((l) => l.name).join(', ') + (hostAlive ? ' · пульт отвечает через ' + via : ' · пульт молчит') : 'нет ни одного сервера связи',
+      };
+    }
+    function report() {
+      if (closed) return;
+      const server = links.some((l) => l.state === 'ok');
+      onStatus(!server ? 'connecting' : hostAlive ? 'online' : 'no-host', info());
+    }
+    links.forEach((l) => { l.topics = topics(); l.onconnect = () => setTimeout(probe, 200); l.open(); });
+
+    const tick = setInterval(() => {
+      if (closed) return;
+      probe();
+      if (hostAlive && Date.now() - lastHeard > CLIENT_WATCHDOG_MS) { hostAlive = false; waitFrom = Date.now(); report(); }
+      // секрет из ссылки не работает 30 с при живых серверах — пробуем найти пульт по коду (маяк)
+      if (fromUrl && !hostAlive && k && room && Date.now() - waitFrom > 30000 && links.some((l) => l.state === 'ok')) {
+        k = ''; waitFrom = Date.now(); links.forEach((x) => x.setTopics(topics()));
+      }
+    }, CLIENT_PING_MS);
+
+    return {
+      send,
+      info,
+      reconnect() { if (closed) return; waitFrom = Date.now(); links.forEach((l) => { if (l.state !== 'ok') l.open(); }); setTimeout(probe, 500); },
+      reconnectAll() { if (closed) return; waitFrom = Date.now(); links.forEach((l) => l.open()); },
+      close() { closed = true; clearInterval(tick); links.forEach((l) => l.close()); },
+    };
+  }
+
+  /* ------------------------------------------------------------ транспорты */
+  const SERVER = window.SVOYAK_SERVER || null; // его подставляет server.js в html
 
   const mqttTransport = {
     name: 'mqtt',
     available: () => !!(window.mqtt && typeof window.mqtt.connect === 'function'),
-
-    createHost({ room, key, onMessage = noop, onStatus = noop }) {
-      const base = TOPIC + key + '/';
-      let closed = false;
-      const where = new Map(); // clientId → брокер, откуда пишет телефон
-      // пульт держит соединение со ВСЕМИ брокерами: телефон найдёт его на любом доступном
-      const links = BROKERS.map((b, idx) => ({ ...b, idx, client: null, state: 'connecting', err: '' }));
-
-      function report() {
-        const ok = links.filter((l) => l.state === 'ok');
-        const text = ok.length
-          ? 'подключено к ' + ok.map((l) => l.name).join(', ') + (ok.length < links.length ? ' · не отвечают: ' + links.filter((l) => l.state !== 'ok').map((l) => l.name).join(', ') : '')
-          : 'брокеры не отвечают: ' + links.map((l) => l.name + (l.err ? ' (' + l.err + ')' : '')).join(', ');
-        onStatus(ok.length ? 'online' : (links.every((l) => l.state === 'fail') ? 'offline' : 'connecting'),
-          { brokers: links.map((l) => ({ name: l.name, state: l.state })), text, best: ok.length ? ok[0].idx : -1 });
-      }
-      const pub = (l, topic, msg, opts) => { if (l.state === 'ok') try { l.client.publish(topic, JSON.stringify(msg), opts || { qos: 0 }); } catch (e) { /* ignore */ } };
-      function presence(l) {
-        pub(l, base + 'host', { online: true, at: Date.now() }, { qos: 1, retain: true });
-        pub(l, TOPIC + 'lobby/' + room, { k: key, at: Date.now() }, { qos: 0, retain: true }); // маяк для ручного ввода кода
-      }
-
-      links.forEach((l) => {
-        let firstTry = true;
-        const timeout = setTimeout(() => { if (l.state === 'connecting') { l.state = 'fail'; l.err = 'таймаут'; report(); } }, 4500);
-        l.client = window.mqtt.connect(l.url, {
-          clientId: 'svoyak-h-' + rnd(10), keepalive: 20, reconnectPeriod: 4000, connectTimeout: 4000, clean: true,
-          will: { topic: base + 'host', payload: JSON.stringify({ online: false }), qos: 1, retain: true },
-        });
-        l.client.on('connect', () => {
-          clearTimeout(timeout); firstTry = false;
-          l.state = 'ok'; l.err = '';
-          l.client.subscribe(base + 'up/+', { qos: 1 });
-          presence(l);
-          report();
-        });
-        l.client.on('message', (topic, payload) => {
-          const msg = parse(payload);
-          if (!msg || topic.indexOf(base + 'up/') !== 0) return;
-          const cid = topic.slice(base.length + 3);
-          where.set(cid, l.idx);
-          onMessage(cid, msg);
-        });
-        const down = (err) => {
-          if (err && err.message) l.err = err.message.slice(0, 40);
-          if (l.state === 'ok' || firstTry) { l.state = firstTry ? 'connecting' : 'fail'; report(); }
-        };
-        l.client.on('error', down);
-        l.client.on('offline', () => down());
-        l.client.on('close', () => { if (l.state === 'ok') { l.state = 'fail'; report(); } });
-      });
-      report();
-      // маяк и «я на месте» — раз в пару секунд (retained, чтобы новые телефоны сразу видели)
-      const beat = setInterval(() => { if (!closed) links.forEach(presence); }, 2500);
-
-      return {
-        broadcast(msg) { links.forEach((l) => pub(l, base + 'down', msg)); },
-        // личное сообщение — через все живые брокеры: телефон мог только что переехать на другой
-        send(clientId, msg) { links.forEach((x) => pub(x, base + 'to/' + clientId, msg, { qos: 1 })); },
-        close(silent) {
-          closed = true; clearInterval(beat);
-          // silent — сеть переезжает в другую вкладку пульта: не сообщаем телефонам «ведущий ушёл»
-          links.forEach((l) => { if (!silent) pub(l, base + 'host', { online: false }, { qos: 1, retain: true }); try { l.client.end(silent); } catch (e) { /* ignore */ } });
-        },
-      };
-    },
-
-    createClient({ room, key, broker, clientId, onMessage = noop, onStatus = noop, onKey = noop }) {
-      let k = key || '';
-      let idx = Number.isInteger(broker) && BROKERS[broker] ? broker : 0;
-      let cl = null, closed = false, serverOk = false, hostAlive = false, lastHeard = 0, tried = 0;
-      let retryT = 0, noHostT = 0, status = '';
-      const set = (st) => {
-        const info = { broker: BROKERS[idx].name, server: serverOk, host: hostAlive, text: '' };
-        info.text = serverOk ? 'сервер связи: ' + BROKERS[idx].name + (hostAlive ? ' · ведущий найден' : ' · ищем ведущего') : 'сервер связи: пробуем ' + BROKERS[idx].name;
-        status = st; onStatus(st, info);
-      };
-      const base = () => TOPIC + k + '/';
-
-      function subscribeMain() {
-        cl.subscribe([base() + 'down', base() + 'to/' + clientId, base() + 'host'], { qos: 1 });
-      }
-      function connect() {
-        if (closed) return;
-        clearTimeout(retryT); clearTimeout(noHostT);
-        try { if (cl) cl.end(true); } catch (e) { /* ignore */ }
-        serverOk = false; hostAlive = false;
-        set('connecting');
-        const my = window.mqtt.connect(BROKERS[idx].url, { clientId: 'svoyak-c-' + rnd(10), keepalive: 20, reconnectPeriod: 0, connectTimeout: 4000, clean: true });
-        cl = my;
-        const giveUp = setTimeout(() => { if (cl === my && !serverOk) nextBroker(); }, 4500);
-        my.on('connect', () => {
-          if (cl !== my) return;
-          clearTimeout(giveUp);
-          serverOk = true; tried = 0;
-          if (k) { subscribeMain(); setTimeout(probe, 300); } else my.subscribe(TOPIC + 'lobby/' + room, { qos: 0 });
-          set('no-host');
-          // ведущий так и не нашёлся на этом брокере — пробуем следующий
-          noHostT = setTimeout(() => { if (cl === my && !hostAlive) nextBroker(); }, 12000);
-        });
-        my.on('message', (topic, payload) => {
-          if (cl !== my) return;
-          const msg = parse(payload);
-          if (!msg) return;
-          if (topic === TOPIC + 'lobby/' + room) {
-            if (!k && msg.k) { k = String(msg.k); onKey(k); my.unsubscribe(topic); subscribeMain(); setTimeout(probe, 300); }
-            return;
-          }
-          if (topic === base() + 'host') {
-            // retained-флаг может быть устаревшим: «найден» только после настоящего ответа пульта (pong)
-            if (msg.online === false) { if (hostAlive) { hostAlive = false; set('no-host'); } }
-            else probe();
-            return;
-          }
-          lastHeard = Date.now();
-          if (!hostAlive) { hostAlive = true; set('online'); }
-          onMessage(msg);
-        });
-        const drop = () => {
-          if (cl !== my || closed) return;
-          clearTimeout(giveUp);
-          if (serverOk) { serverOk = false; hostAlive = false; set('connecting'); retryT = setTimeout(connect, 1500); }
-          else nextBroker();
-        };
-        my.on('error', drop);
-        my.on('close', drop);
-        my.on('offline', drop);
-      }
-      function nextBroker() {
-        if (closed) return;
-        tried++;
-        idx = (idx + 1) % BROKERS.length;
-        // обошли все брокеры, а ведущего нет — возможно, секрет в ссылке устарел: ищем по маяку кода
-        if (tried >= BROKERS.length && k && room) { k = ''; tried = 0; }
-        retryT = setTimeout(connect, tried % BROKERS.length === 0 ? 3000 : 200);
-      }
-
-      // пинг + сторож: пульт отвечает pong; молчит долго — считаем, что ведущего нет
-      function probe() { if (cl && serverOk && k) try { cl.publish(base() + 'up/' + clientId, JSON.stringify({ t: 'ping' }), { qos: 0 }); } catch (e) { /* ignore */ } }
-      const pingT = setInterval(() => {
-        if (closed || !serverOk || !k) return;
-        probe();
-        if (hostAlive && Date.now() - lastHeard > CLIENT_WATCHDOG_MS) { hostAlive = false; set('no-host'); }
-      }, CLIENT_PING_MS);
-
-      connect();
-      return {
-        send(msg) {
-          if (!cl || !serverOk || !k) return false;
-          try { cl.publish(base() + 'up/' + clientId, JSON.stringify(msg), { qos: 1 }); return true; } catch (e) { return false; }
-        },
-        reconnect() { if (!closed && (!cl || !serverOk)) connect(); },
-        close() { closed = true; clearTimeout(retryT); clearTimeout(noHostT); clearInterval(pingT); try { if (cl) cl.end(true); } catch (e) { /* ignore */ } },
-      };
-    },
+    createHost: (o) => pubsubHost(BROKERS, mqttLink, o),
+    createClient: (o) => pubsubClient(BROKERS, mqttLink, o),
+  };
+  const serverTransport = {
+    name: 'local-server',
+    available: () => typeof window.EventSource === 'function' && typeof window.fetch === 'function',
+    createHost: (o) => pubsubHost([{ name: 'этот компьютер', base: location.origin }], sseLink, o),
+    createClient: (o) => pubsubClient([{ name: 'ноутбук ведущего', base: location.origin }], sseLink, o),
   };
 
-  const TRANSPORTS = { mqtt: mqttTransport, peer: peerTransport, local: localTransport };
+  const TRANSPORTS = { mqtt: mqttTransport, 'local-server': serverTransport, peer: peerTransport, local: localTransport };
 
   function pickTransport() {
-    let name = 'mqtt';
+    let name = SERVER ? 'local-server' : 'mqtt';
     try { const q = new URLSearchParams(location.search).get('net'); if (q && TRANSPORTS[q]) name = q; } catch (e) { /* ignore */ }
     return TRANSPORTS[name];
   }
-
   const T = pickTransport();
+  const DEFAULT = SERVER ? 'local-server' : 'mqtt';
+
   function unavailableStub(onStatus) {
     setTimeout(() => onStatus && onStatus('unavailable'), 0);
-    return { broadcast: noop, send: () => false, reconnect: noop, close: noop };
+    return { broadcast: noop, send: () => false, reconnect: noop, reconnectAll: noop, info: () => ({}), close: noop };
+  }
+
+  /** IP мака в локальной сети (для ссылок/QR в локальном режиме). Ведущий может выбрать другой. */
+  function lanIp() {
+    if (!SERVER) return '';
+    let ip = '';
+    try { ip = localStorage.getItem('svoyak:lanip') || ''; } catch (e) { /* ignore */ }
+    const list = (SERVER.ips || []).map((x) => x.address);
+    return list.includes(ip) ? ip : (SERVER.ip || list[0] || location.hostname);
+  }
+  function pageUrl(page, room, key, broker) {
+    let u;
+    if (SERVER && T.name === 'local-server') u = new URL('http://' + lanIp() + ':' + (SERVER.port || location.port) + '/' + page);
+    else { u = new URL(page, location.href); u.search = ''; u.hash = ''; }
+    u.searchParams.set('room', room);
+    if (key && (T.name === 'mqtt' || T.name === 'local-server')) u.searchParams.set('k', key);
+    if (T.name === 'mqtt' && broker >= 0) u.searchParams.set('b', String(broker));
+    if (T.name !== DEFAULT) u.searchParams.set('net', T.name);
+    return u.toString();
   }
 
   window.Net = {
     transport: T.name,
+    server: SERVER,
     available: () => T.available(),
+    brokers: T.name === 'mqtt' ? BROKERS.map((b) => b.name) : [],
     createHost(opts) { return T.available() ? T.createHost(opts) : unavailableStub(opts.onStatus); },
     createClient(opts) { return T.available() ? T.createClient(opts) : unavailableStub(opts.onStatus); },
-    brokers: BROKERS.map((b) => b.name),
-    /** Ссылка для телефона: buzzer.html рядом с текущей страницей (работает и на GitHub Pages, и локально).
-        k — секрет комнаты (топики MQTT), b — индекс брокера, с которого телефону начать. */
-    joinUrl(room, key, broker) {
-      const u = new URL('buzzer.html', location.href);
-      u.search = '';
-      u.hash = '';
-      u.searchParams.set('room', room);
-      if (key && T.name === 'mqtt') u.searchParams.set('k', key);
-      if (T.name === 'mqtt' && broker >= 0) u.searchParams.set('b', String(broker));
-      if (T.name !== 'mqtt') u.searchParams.set('net', T.name);
-      return u.toString();
-    },
+    lanIp,
+    setLanIp(ip) { try { localStorage.setItem('svoyak:lanip', ip); } catch (e) { /* ignore */ } },
+    /** Ссылка для телефона (k — секрет комнаты, b — подсказка брокера). */
+    joinUrl: (room, key, broker) => pageUrl('buzzer.html', room, key, broker),
+    /** Ссылка на экран гостей для ДРУГОГО устройства. */
+    screenUrl: (room, key, broker) => pageUrl('screen.html', room, key, broker),
   };
 
-  /** QR-код как картинка (свой генератор js/qr.js, без внешних библиотек). null — если не вышло. */
+  /** QR-код как картинка (свой генератор js/qr.js). null — если не вышло. */
   const qrCache = new Map();
   window.qrDataUrl = function (text) {
     if (qrCache.has(text)) return qrCache.get(text);

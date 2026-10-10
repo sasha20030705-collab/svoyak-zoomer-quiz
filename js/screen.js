@@ -846,7 +846,7 @@
   function processEvents(s) {
     s.events.filter((e) => e.id > lastEvent).forEach((ev) => {
       lastEvent = ev.id;
-      if (Date.now() - ev.at < 8000) handleEvent(ev, s); // старое не проигрываем
+      if (U.now() - ev.at < 8000) handleEvent(ev, s); // старое не проигрываем (часы — по пульту)
     });
     lastEvent = Math.max(lastEvent, s.eventSeq || 0);
   }
@@ -963,14 +963,80 @@
     idleT = setTimeout(() => document.body.classList.add('idle'), 2500);
   });
 
-  /* ---------- старт ---------- */
-  window.loadQuiz().then(({ quiz: q }) => {
-    quiz = q;
-    window.Store.setQuiz(q);
+  /* ---------- режимы: этот же браузер (пульт рядом) или по сети ----------
+     Пульт в этом браузере держит «замок» в localStorage. Если его нет, а в адресе
+     есть ?room=…, экран работает как сетевой клиент: состояние приходит от пульта
+     через тот же транспорт, что и у телефонов. Без ?room и без пульта — форма «код комнаты». */
+  const P = new URLSearchParams(location.search);
+  const netRoom = (P.get('room') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+  function localHostAlive() {
+    try { const l = JSON.parse(localStorage.getItem('svoyak:host-lock') || 'null'); return !!(l && Date.now() - l.at < 6000); } catch (e) { return false; }
+  }
+  const netMode = !!netRoom && !(localHostAlive() && Store.get().room === netRoom);
+  const badge = $('#net-badge'), connectEl = $('#connect');
+  function showBadge(text) { badge.hidden = !text; badge.textContent = text || ''; }
+
+  function startLocal() {
     lastEvent = Store.get().eventSeq || 0; // старые события не проигрываем
     render();
     musicSettings(Store.get());
     Store.subscribe((s) => { processEvents(s); render(); musicSettings(s); });
+    // отмечаемся для пульта: «экран открыт здесь»
+    const beat = () => { try { localStorage.setItem('svoyak:screen-local', String(Date.now())); } catch (e) { /* ignore */ } };
+    beat(); setInterval(beat, 2000);
+    // без пульта в этом браузере и без кода — предлагаем подключиться по сети
+    const checkHost = () => { connectEl.hidden = localHostAlive(); };
+    setTimeout(() => { checkHost(); setInterval(checkHost, 2000); }, 2500);
+    $('#connect-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const code = $('#connect-code').value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+      if (!code) return;
+      const u = new URL(location.href);
+      u.search = '';
+      u.searchParams.set('room', code);
+      location.href = u.toString();
+    });
+  }
+
+  function startNet() {
+    const avatars = {};          // teamId → {v, data}
+    let first = true, raw = null;
+    const withAvatars = (st) => {
+      const c = Object.assign({}, st);
+      c.teams = st.teams.map((t) => { const a = avatars[t.id]; return a && a.v === (t.avatarV || 1) && t.avatarV ? Object.assign({}, t, { avatar: a.data }) : t; });
+      return c;
+    };
+    const clientId = 'scr' + Math.random().toString(36).slice(2, 10);
+    showBadge('подключаемся к пульту…');
+    const client = window.Net.createClient({
+      room: netRoom, key: P.get('k') || '', clientId,
+      onStatus(st) {
+        if (st === 'online') { client.send({ t: 'hello', role: 'screen' }); showBadge(''); }
+        else showBadge(st === 'no-host' ? 'пульт не отвечает — проверь, что он открыт' : st === 'unavailable' ? 'связь недоступна' : 'ищем сервер связи…');
+      },
+      onMessage(m) {
+        if (m.t === 'full' && m.s) {
+          if (typeof m.now === 'number') Store.setClockSkew(m.now - Date.now()); // часы — по пульту
+          raw = m.s;
+          if (first) { first = false; lastEvent = raw.eventSeq || 0; } // историю эффектов не проигрываем
+          Store.applyRemote(withAvatars(raw));
+        } else if (m.t === 'avatar') {
+          avatars[m.teamId] = { v: m.v, data: m.data };
+          if (raw) Store.applyRemote(withAvatars(raw));
+        }
+      },
+    });
+    // клавиатурный баззер этого экрана — пульту по сети
+    Store.useRemote((a) => { if (a && a.type === 'buzz') client.send({ t: 'kbBuzz', teamId: a.teamId }); });
+    Store.subscribe((s) => { processEvents(s); render(); musicSettings(s); });
+    window.addEventListener('pagehide', () => client.send({ t: 'leave' }));
+  }
+
+  /* ---------- старт ---------- */
+  window.loadQuiz().then(({ quiz: q }) => {
+    quiz = q;
+    window.Store.setQuiz(q);
+    if (netMode) startNet(); else startLocal();
     requestAnimationFrame(frame);
   });
 

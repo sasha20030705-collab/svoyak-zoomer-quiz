@@ -244,13 +244,21 @@
 
   /* ---------- отрисовка ---------- */
   const NET_TEXT = { connecting: 'ищем сервер связи…', online: 'на связи', offline: 'нет сети', 'no-host': 'ведущий не найден', unavailable: 'библиотека связи не загрузилась' };
+  let diagSig = '';
   function renderDiag() {
+    const inf = (client && client.info) ? client.info() : (netInfo || {});
     const server = netStatus === 'online' || netStatus === 'no-host';
     const hostOk = netStatus === 'online';
-    const b = netInfo && netInfo.broker ? ' (' + netInfo.broker + ')' : '';
-    $('diag').innerHTML = `<span>${server ? '✅' : '⏳'} сервер связи: ${server ? 'подключено' + b : 'нет'}</span><span>${hostOk ? '✅' : '⏳'} ведущий: ${hostOk ? 'найден' : 'не найден'}</span>`;
+    const bro = (inf.brokers || []).map((b) => (b.state === 'ok' ? '🟢' : b.state === 'connecting' ? '🟡' : '🔴') + b.name).join(' ');
+    const html = `<span>${server ? '✅' : '⏳'} сервер связи: ${server ? 'подключено' + (inf.broker ? ' (' + inf.broker + ')' : '') : 'нет'}</span>`
+      + `<span>${hostOk ? '✅' : '⏳'} ведущий: ${hostOk ? 'найден' + (inf.via ? ' через ' + inf.via : '') : 'не найден' + (server && inf.waitSec ? ' · ждём ' + inf.waitSec + ' с' : '')}</span>`
+      + (hostOk ? '' : `<span class="diag-more">${bro}${inf.key ? ' · ключ ' + inf.key : ''} <button type="button" id="net-retry">🔄 переподключиться</button></span>`);
+    if (html !== diagSig) { diagSig = html; $('diag').innerHTML = html; }
     $('diag').classList.toggle('ok', hostOk);
   }
+  document.addEventListener('click', (e) => {
+    if (e.target && e.target.id === 'net-retry' && client) { (client.reconnectAll || client.reconnect)(); diagSig = ''; }
+  });
   let teamsSig = '';
 
   function render() {

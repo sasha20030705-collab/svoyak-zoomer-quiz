@@ -20,6 +20,7 @@
   const ID_RETRIES = 8;          // сколько раз ждём освобождения peer id перед сменой комнаты
 
   let host = null, room = null, status = 'off', statusInfo = '', best = -1;
+  let diag = {}, lastIn = null;  // диагностика для пульта
   let idTaken = 0;
   let lastSent = '';
   const devices = new Map();     // clientId → { teamId, lastSeen }
@@ -101,6 +102,7 @@
   function prune() {
     const now = Date.now();
     let changed = false;
+    screens.forEach((sc, id) => { if (now - sc.lastSeen > DEVICE_TTL) { screens.delete(id); listeners.forEach((fn) => fn()); } });
     devices.forEach((d, id) => { if (now - d.lastSeen > DEVICE_TTL) { devices.delete(id); changed = true; } });
     if (changed) publishNet();
   }
@@ -119,7 +121,50 @@
   const reply = (clientId, msg) => host && host.send(clientId, msg);
   const joined = (clientId, t) => reply(clientId, { t: 'joined', teamId: t ? t.id : null, rev: S.get().rev });
 
+  /* ---------- экраны гостей на других устройствах ---------- */
+  const screens = new Map();     // clientId → { lastSeen, avatars: Map(teamId → версия) }
+  /** Полное состояние для экрана: без истории undo и без картинок аватаров (они отдельно). */
+  function fullState(s) {
+    const c = Object.assign({}, s);
+    c.history = [];
+    c.teams = s.teams.map((t) => Object.assign({}, t, { avatar: null, device: t.device ? 1 : null }));
+    return { t: 'full', now: Date.now(), s: c };
+  }
+  let lastFull = '';
+  function pushScreens(force) {
+    if (!host || !screens.size) return;
+    const msg = fullState(S.get());
+    const sig = JSON.stringify(msg.s);
+    if (!force && sig === lastFull) return;
+    lastFull = sig;
+    screens.forEach((sc, cid) => { host.send(cid, msg); pushScreenAvatars(cid, sc, false); });
+  }
+  function pushScreenAvatars(cid, sc, force) {
+    S.get().teams.forEach((t) => {
+      const v = t.avatar ? (t.avatarV || 1) : 0;
+      if (!force && sc.avatars.get(t.id) === v) return;
+      sc.avatars.set(t.id, v);
+      host.send(cid, { t: 'avatar', teamId: t.id, v, data: t.avatar || null });
+    });
+  }
+  function onScreen(cid, msg) {
+    let sc = screens.get(cid);
+    if (!sc) { sc = { lastSeen: Date.now(), avatars: new Map() }; screens.set(cid, sc); listeners.forEach((fn) => fn()); }
+    sc.lastSeen = Date.now();
+    if (msg.t === 'hello') { const f = fullState(S.get()); host.send(cid, f); pushScreenAvatars(cid, sc, true); }
+    else if (msg.t === 'kbBuzz') { S.dispatch({ type: 'buzz', teamId: msg.teamId }); }   // клавиатурный баззер удалённого экрана
+    else if (msg.t === 'ping') host.send(cid, { t: 'pong', now: Date.now() });
+    else if (msg.t === 'leave') { screens.delete(cid); listeners.forEach((fn) => fn()); }
+  }
+
   function onMessage(clientId, msg) {
+    lastIn = { t: msg.t, cid: clientId, at: Date.now(), role: msg.role || (screens.has(clientId) ? 'screen' : 'phone') };
+    // экраны гостей шлют clientId с префиксом scr — их не считаем телефонами
+    if (msg.role === 'screen' || screens.has(clientId) || /^scr/.test(clientId)) {
+      if (devices.delete(clientId)) publishNet();
+      onScreen(clientId, msg);
+      return;
+    }
     touch(clientId);
     switch (msg.t) {
       case 'hello': { // телефон (пере)подключился — возвращаем его в свою команду
@@ -211,8 +256,12 @@
   }
 
   function setStatus(st, info) {
+    const prevSt = status, prevText = statusInfo;
     status = st;
     statusInfo = typeof info === 'string' ? info : (info && info.text) || '';
+    diag = info && typeof info === 'object' ? info : { text: statusInfo };
+    // на каждый «пульс» сети не перерисовываем пульт — только если что-то поменялось
+    if (prevSt === st && prevText === statusInfo && st !== 'id-taken') { if (info && 'best' in info) best = info.best; return; }
     if (info && typeof info === 'object' && 'best' in info) best = info.best;
     if (st === 'online') idTaken = 0;
     if (st === 'id-taken') {
@@ -227,6 +276,7 @@
   function connect() {
     if (host) host.close();
     devices.clear();
+    screens.clear();
     room = ensureRoom();
     if (!window.Net) { setStatus('unavailable', 'js/net.js не загрузился'); return; }
     if (!window.Net.available()) { setStatus('unavailable', 'библиотека связи (' + window.Net.transport + ') не загрузилась'); return; }
@@ -266,11 +316,11 @@
     started = true;
     tryLock();
     setInterval(tryLock, LOCK_BEAT_MS); // heartbeat замка
-    setInterval(() => { if (host) { prune(); pushState(true); } }, KEEPALIVE_MS);
+    setInterval(() => { if (host) { prune(); pushState(true); pushScreens(true); } }, KEEPALIVE_MS);
     S.subscribe((s) => {
       if (!host) return;
       if (s.room && s.room !== room) connect(); // комнату сменили (например, в другой вкладке)
-      else pushState(false);
+      else { pushState(false); pushScreens(false); }
     });
   }
 
@@ -284,6 +334,9 @@
     isOnline: (teamId) => { const t = team(teamId); return !!(t && t.device && devices.has(t.device)); },
     get status() { return status; },
     get info() { return statusInfo; },
+    /** Живая диагностика: брокеры, последнее входящее сообщение. */
+    get diag() { return Object.assign({}, diag, { lastIn: lastIn && Object.assign({}, diag.lastIn && diag.lastIn.cid === lastIn.cid ? diag.lastIn : {}, lastIn) }); },
+    get screens() { return screens.size; },
     get room() { return room || S.get().room; },
     devices: () => Array.from(devices.entries()).map(([id, d]) => ({ id, teamId: (boundTeam(id) || {}).id || null, lastSeen: d.lastSeen })),
     onChange(fn) { listeners.add(fn); },

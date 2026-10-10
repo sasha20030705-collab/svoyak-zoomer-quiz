@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Manrope:wght@600;700;800&family=Rubik+Mono+One&family=Unbounded:wght@700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/base.css?v=202610101701">
-  <link rel="stylesheet" href="css/screen.css?v=202610101701">
+  <link rel="stylesheet" href="css/base.css?v=202610102050">
+  <link rel="stylesheet" href="css/screen.css?v=202610102050">
 </head>
 <body class="idle">
   <!-- живой фон -->
@@ -37,16 +37,26 @@
 
   <div id="grain" aria-hidden="true"></div>
 
+  <!-- экран на другом устройстве: подключение к пульту по коду комнаты -->
+  <div id="connect" hidden>
+    <form id="connect-form">
+      <div class="c-title">ПОДКЛЮЧИТЬСЯ К ПУЛЬТУ</div>
+      <p>Открой пульт на ноутбуке ведущего — код комнаты в карточке «Телефоны» (или открой здесь ссылку «экран на другом устройстве» с пульта).</p>
+      <div class="c-row"><input id="connect-code" maxlength="6" placeholder="КОД" autocomplete="off" autocapitalize="characters"><button>подключиться →</button></div>
+    </form>
+  </div>
+  <div id="net-badge" hidden></div>
   <div id="sound-hint">кликни или нажми любую клавишу — включим звук · F — на весь экран</div>
 
-  <script src="js/state.js?v=202610101701"></script>
-  <script src="js/qr.js?v=202610101701"></script>
-  <script src="js/net.js?v=202610101701"></script>
-  <script src="js/loader.js?v=202610101701"></script>
-  <script src="js/audio.js?v=202610101701"></script>
-  <script src="js/music.js?v=202610101701"></script>
-  <script src="js/mediadb.js?v=202610101701"></script>
-  <script src="js/confetti.js?v=202610101701"></script>
-  <script src="js/screen.js?v=202610101701"></script>
+  <script src="js/state.js?v=202610102050"></script>
+  <script src="js/vendor/mqtt-5.10.1.min.js?v=202610102050"></script>
+  <script src="js/qr.js?v=202610102050"></script>
+  <script src="js/net.js?v=202610102050"></script>
+  <script src="js/loader.js?v=202610102050"></script>
+  <script src="js/audio.js?v=202610102050"></script>
+  <script src="js/music.js?v=202610102050"></script>
+  <script src="js/mediadb.js?v=202610102050"></script>
+  <script src="js/confetti.js?v=202610102050"></script>
+  <script src="js/screen.js?v=202610102050"></script>
 </body>
 </html>

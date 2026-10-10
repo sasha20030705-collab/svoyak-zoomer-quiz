@@ -62,9 +62,12 @@
   }
 
   /** Оставшееся время таймера в мс (с учётом бегущего отсчёта). */
+  // экран на другом устройстве: часы ноутбуков расходятся, поправка приходит от пульта
+  let clockSkew = 0;
+  const syncedNow = () => Date.now() + clockSkew;
   function timerRemaining(t) {
     if (!t) return 0;
-    if (t.running) return Math.max(0, t.endsAt - now());
+    if (t.running) return Math.max(0, t.endsAt - syncedNow());
     return Math.max(0, t.remaining);
   }
 
@@ -470,7 +473,9 @@
 
   function notify(action) { subs.forEach((fn) => { try { fn(state, action); } catch (e) { console.error(e); } }); }
 
+  let remoteSend = null; // режим «экран по сети»: состояние приходит от пульта, действия уходят ему
   function adopt(next) {
+    if (remoteSend) return false;
     if (!next || next.v !== 1 || next.rev <= state.rev) return false;
     state = next;
     notify(null);
@@ -483,6 +488,7 @@
   });
 
   function dispatch(action) {
+    if (remoteSend) { try { remoteSend(action); } catch (e) { /* ignore */ } return state; }
     // подтягиваем самое свежее из localStorage, чтобы не затереть чужое изменение
     const disk = load();
     if (disk && disk.rev > state.rev) state = disk;
@@ -501,6 +507,12 @@
     subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
     setQuiz(q) { QUIZ = q; },
     quiz: () => QUIZ,
+    /** Экран на другом устройстве: локальные изменения отключаются, действия (баззер) — в sendFn. */
+    useRemote(sendFn) { remoteSend = sendFn; },
+    isRemote: () => !!remoteSend,
+    /** Принять состояние от пульта (без записи в localStorage этого устройства). */
+    applyRemote(next) { if (!next) return; state = next; notify(null); },
+    setClockSkew(ms) { clockSkew = Number(ms) || 0; },
   };
-  window.QuizUtil = { makeRoom, makeKey, RESERVED_KEYS, cellKey, keyLabel, textOn, timerRemaining, getQ, cellValue, currentValue, PALETTE, EMOJIS, DEFAULT_KEYS };
+  window.QuizUtil = { now: syncedNow, makeRoom, makeKey, RESERVED_KEYS, cellKey, keyLabel, textOn, timerRemaining, getQ, cellValue, currentValue, PALETTE, EMOJIS, DEFAULT_KEYS };
 })();

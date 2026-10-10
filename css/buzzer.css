@@ -121,3 +121,6 @@ body.av-open { overflow: hidden; }
 .btn.waiting { background: #d8d4c8; color: #555; box-shadow: 3px 3px 0 var(--black); }
 #host-hint { margin: 0; }
 #room-form input { min-height: 52px; text-transform: uppercase; letter-spacing: .1em; }
+
+.diag-more { width: 100%; font-weight: 700; text-transform: none; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+#net-retry { border: 2px solid var(--black); border-radius: 8px; background: var(--white); font: 800 12px var(--font-head); padding: 4px 8px; }

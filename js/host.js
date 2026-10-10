@@ -325,14 +325,24 @@
     }
     html += renderPhones(s);
     html += renderMusic(s);
+    // экран гостей: здесь (тот же браузер) и/или по сети (другой ноутбук у ТВ)
+    const scrState = `<span id="scr-state">${screenStateHtml()}</span>`;
+    const best = s.net && typeof s.net.best === 'number' ? s.net.best : -1;
+    const surl = s.room && window.Net ? window.Net.screenUrl(s.room, s.netKey, best) : '';
+    const sqr = surl && window.qrDataUrl ? window.qrDataUrl(surl) : null;
+    const hasOwnMusic = s.music && s.music.files && Object.keys(s.music.files).length;
     html += `
       <section class="card">
-        <h2>Экран гостей</h2>
+        <h2>Экран гостей ${scrState}</h2>
         <div class="row">
-          <button class="btn lime" data-act="openScreen">📺 Открыть</button>
+          <button class="btn lime" data-act="openScreen">📺 Открыть здесь</button>
           <a class="btn" href="screen.html" target="_blank" rel="noopener">ссылка ↗</a>
         </div>
-        <p class="muted small" style="margin:10px 0 0">Открывай в этом же браузере — вкладки синхронизируются сами.</p>
+        <h3>Экран на другом устройстве</h3>
+        <p class="muted small" style="margin:0 0 8px">Ноутбук у ТВ: открой там эту ссылку (или отсканируй QR) — экран подключится к пульту по сети.</p>
+        ${surl ? `<div class="room-row"><input type="text" id="screen-url" readonly value="${esc(surl)}"><img class="qr" src="${sqr || ''}" alt="QR" width="90" height="90" ${sqr ? '' : 'hidden'}></div>
+        <div class="row" style="margin-top:8px"><button class="btn sm" data-act="copyScreenUrl">📋 скопировать</button><a class="btn sm" href="${esc(surl)}" target="_blank" rel="noopener">открыть ↗</a></div>` : '<p class="muted small">Сначала дождись подключения связи (карточка «Телефоны»).</p>'}
+        ${hasOwnMusic ? '<p class="muted small" style="margin:8px 0 0">🎧 Свои mp3 живут в этом браузере — на экране по сети играет встроенная музыка.</p>' : ''}
         <button class="btn ${armedKey === 'reset' ? 'danger' : ''} wide" style="margin-top:12px" data-act="reset">${armedKey === 'reset' ? 'Точно сбросить? Жми ещё раз' : '⟲ Сбросить игру'}</button>
       </section>`;
     return html;
@@ -371,6 +381,11 @@
       ? `<div class="diag warn">🔁 Сеть держит другая вкладка пульта. <button class="btn sm" data-act="takeOver">забрать сеть сюда</button></div>`
       : `<div class="diag">✅ Эта вкладка держит сеть${window.Net ? ' · транспорт ' + esc(window.Net.transport) : ''}</div>`;
     const info = (R && R.info) || (s.net && s.net.info) || '';
+    const SRV = window.Net && window.Net.server;
+    const local = SRV && window.Net.transport === 'local-server'
+      ? `<div class="diag">🏠 Локальный режим (без интернета). Все устройства должны быть в одной сети с этим ноутбуком: например, раздай Wi-Fi с телефона и подключи к нему и второй ноутбук, и телефоны гостей.
+         ${(SRV.ips || []).length > 1 ? `<label class="small">адрес для QR: <select data-input="lanIp">${SRV.ips.map((x) => `<option value="${esc(x.address)}" ${x.address === window.Net.lanIp() ? 'selected' : ''}>${esc(x.address)} — ${esc(x.label)}</option>`).join('')}</select></label>` : ''}</div>`
+      : '';
     const server = st === 'online' ? `<div class="diag">🛰 Сервер связи: ${esc(info || 'подключено')}</div>`
       : st === 'unavailable' ? `<div class="diag warn">⛔ ${esc(info || 'библиотека связи не загрузилась')}. Играем с клавиатурными баззерами.</div>`
         : st === 'other-tab' ? ''
@@ -386,7 +401,8 @@
           </div>
           ${qr ? `<img class="qr" src="${qr}" alt="QR-код для телефона" width="110" height="110">` : ''}
         </div>
-        ${holder}${server}
+        ${holder}${server}${local}
+        <details class="netdiag" ${diagOpen ? 'open' : ''}><summary>диагностика связи</summary><div id="net-diag"></div></details>
         <div class="devs">${rows}${unbound ? `<div class="dev-row"><span class="muted">телефонов без команды</span><span class="dev-n">📱×${unbound}</span></div>` : ''}</div>
         <p class="muted small" style="margin:8px 0 0">1 телефон = 1 команда. «Отвязать» — если телефон сел или потерялся: баллы останутся, команду можно восстановить с другого телефона.</p>
         <button class="btn sm ${armedKey === 'newRoom' ? 'danger' : ''}" style="margin-top:10px" data-act="newRoom">${armedKey === 'newRoom' ? 'Точно? Телефоны отвалятся' : 'новая комната'}</button>
@@ -473,6 +489,34 @@
   }
   setInterval(tickTimer, 100);
 
+  /** «Экран для гостей: подключён (здесь / по сети) / не подключён». */
+  function screenStateHtml() {
+    let localScreen = false;
+    try { localScreen = Date.now() - Number(localStorage.getItem('svoyak:screen-local') || 0) < 6000; } catch (e) { /* ignore */ }
+    const netScreens = (window.Remote && window.Remote.screens) || 0;
+    return localScreen || netScreens
+      ? `<span class="pill lime">подключён${localScreen ? ' · здесь' : ''}${netScreens ? ' · по сети' + (netScreens > 1 ? ' ×' + netScreens : '') : ''}</span>`
+      : '<span class="pill">не подключён</span>';
+  }
+
+  /** Живая диагностика сети на пульте (без полной перерисовки). */
+  let diagOpen = false;
+  document.addEventListener('toggle', (e) => { if (e.target.classList && e.target.classList.contains('netdiag')) diagOpen = e.target.open; }, true);
+  function tickDiag() {
+    const ss = document.getElementById('scr-state');
+    if (ss) { const h = screenStateHtml(); if (ss.innerHTML !== h) ss.innerHTML = h; }
+    const el = document.getElementById('net-diag');
+    if (!el || !window.Remote) return;
+    const d = window.Remote.diag || {};
+    const ago = (t) => (t ? Math.round((Date.now() - t) / 1000) + ' с назад' : '—');
+    const rows = (d.brokers || []).map((b) => `<div>${b.state === 'ok' ? '🟢' : b.state === 'connecting' ? '🟡' : '🔴'} <b>${esc(b.name)}</b> · ${b.state === 'ok' ? 'подключено' : b.state === 'connecting' ? 'подключаемся' : 'нет'}${b.err ? ' (' + esc(b.err) + ')' : ''} · последнее сообщение: ${ago(b.lastAt)}</div>`).join('');
+    const li = d.lastIn;
+    el.innerHTML = `${rows || '<div>—</div>'}
+      <div style="margin-top:6px">последнее от устройства: ${li ? `<b>${esc(li.t || '?')}</b> от ${esc(li.role || '')} ${esc(String(li.cid).slice(0, 6))}… ${li.broker ? 'через ' + esc(li.broker) : ''} · ${ago(li.at)}` : 'ещё ничего'}</div>
+      <div>комната ${esc(S.get().room || '—')} · секрет ${esc((S.get().netKey || '').slice(0, 4))}… · транспорт ${esc(window.Net ? window.Net.transport : '—')}</div>`;
+  }
+  setInterval(tickDiag, 1000);
+
   /* ======================================================================
      ДЕЙСТВИЯ
      ====================================================================== */
@@ -546,6 +590,14 @@
       case 'unbind':
         if (confirmTwice('unbind-' + id, 'Отвязать телефон? Баллы команды останутся. Жми ещё раз')) window.Remote.unbind(id);
         break;
+      case 'copyScreenUrl': {
+        const el = document.getElementById('screen-url');
+        if (!el) break;
+        const done = () => toast('Ссылка скопирована');
+        const fallback = () => { el.select(); try { document.execCommand('copy'); done(); } catch (_) { toast('Выдели ссылку и скопируй вручную'); } };
+        try { navigator.clipboard.writeText(el.value).then(done, fallback); } catch (e) { fallback(); }
+        break;
+      }
       case 'takeOver': window.Remote.takeOver(); render(); break;
       case 'newRoom':
         if (confirmTwice('newRoom', 'Новый код комнаты — телефонам придётся сканировать заново. Жми ещё раз')) window.Remote.newRoom();
@@ -567,6 +619,7 @@
     else if (kind === 'bet') d({ type: 'setBet', bet: el.value });
     else if (kind === 'finalBet') { if (el.value !== '') d({ type: 'finalBet', teamId: id, bet: el.value }); }
     else if (kind === 'duration') d({ type: 'timerDuration', seconds: +el.value });
+    else if (kind === 'lanIp') { window.Net.setLanIp(el.value); render(); }
     else if (kind === 'answerSeconds') d({ type: 'answerSeconds', seconds: +el.value });
   });
 

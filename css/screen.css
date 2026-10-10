@@ -467,3 +467,13 @@ body.idle { cursor: none; }
 .pcol .ava { overflow: visible; }
 .pcol .ava .av-img { position: absolute; inset: 0; }
 #buzz .e.has-av { width: 260px; height: 260px; border: 6px solid var(--black); border-radius: 18%; overflow: hidden; background: var(--white); box-shadow: 14px 14px 0 var(--black); transform: rotate(-5deg); filter: none; }
+
+/* ---------- экран по сети: подключение и статус ---------- */
+#connect { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; background: rgba(10, 10, 10, .78); padding: 24px; }
+#connect form { max-width: 640px; width: 100%; background: var(--white); border: var(--line); border-radius: 18px; box-shadow: 12px 12px 0 var(--black); padding: 28px; transform: rotate(-1deg); }
+#connect .c-title { font: 400 34px/1 var(--font-display); margin-bottom: 12px; }
+#connect p { font: 700 16px/1.4 var(--font-body); margin: 0 0 16px; }
+#connect .c-row { display: flex; gap: 12px; }
+#connect input { flex: 1; min-width: 0; font: 400 34px var(--font-display); letter-spacing: .12em; text-transform: uppercase; padding: 8px 14px; border: var(--line); border-radius: 12px; }
+#connect button { font: 800 18px var(--font-head); text-transform: uppercase; padding: 0 18px; border: var(--line); border-radius: 12px; background: var(--lime); box-shadow: 5px 5px 0 var(--black); cursor: pointer; }
+#net-badge { position: fixed; left: 50%; top: 70px; transform: translateX(-50%); z-index: 250; padding: 10px 18px; border-radius: 10px; background: var(--yellow); border: 3px solid var(--black); box-shadow: 4px 4px 0 var(--black); font: 800 16px var(--font-head); white-space: nowrap; }

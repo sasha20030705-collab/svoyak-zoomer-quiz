@@ -14,6 +14,7 @@
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
+  const hint = $('#sound-hint');
   const stageEl = $('#stage'), viewsEl = $('#views'), scorebar = $('#scorebar');
   const buzzEl = $('#buzz'), flashEl = $('#flash'), shell = $('#shell'), bgEl = $('#bg');
   const confetti = window.Confetti($('#confetti'));
@@ -258,14 +259,12 @@
           <span class="tag black round">${esc(R.name)}</span>
           <span class="tag white vibe">${esc(pick(['ваш ход, ребята', 'выбирайте, не тяните', 'ну что, кто смелый?', 'дорого = больно']))}</span>
           <div class="logo" style="font-size:${Math.min(64, Math.round(1500 / Math.max(6, titleParts().main.length)))}px">${esc(titleParts().main)}</div>
-          <div class="join-card mini" hidden><img class="jc-qr" alt="QR-код"><div><div class="jc-code"></div><span class="jc-dev"></span></div></div>
         </div>
         <div class="board-grid" style="--cols:${cols}">${cells}</div>
       </div>`);
     return {
       type: 'board', el, round: r,
       update(st) {
-        el.classList.toggle('with-qr', updateJoin(el, st));
         $$('.cell', el).forEach((cell) => {
           const u = st.used[cell.dataset.key];
           cell.classList.toggle('used', !!u);
@@ -626,6 +625,8 @@
     view = v;
     setTheme(v.type);
     setTickers(v.type);
+    // подсказка про звук и F — только на заставке
+    hint.hidden = v.type !== 'splash';
     if (v.mounted) v.mounted();
     scorebar.classList.toggle('hidden', v.type === 'splash' || v.type === 'winner' || !s.teams.length);
   }
@@ -894,6 +895,8 @@
     const m = Object.assign({ enabled: true, volume: 0.5, sfx: 0.8, files: {} }, s.music || {});
     window.Music.configure({ enabled: m.enabled, volume: m.volume });
     window.Sfx.setSfxVolume(m.sfx);
+    // «звук на экране вкл/выкл» с пульта глушит всё: и музыку, и эффекты
+    if (window.Sfx.isMuted() !== !!m.muted) window.Sfx.setMuted(!!m.muted);
     return m;
   }
   /** Свои файлы ведущего из IndexedDB (после первого клика, когда звук разрешён). */
@@ -937,7 +940,6 @@
   /* ======================================================================
      ВВОД: баззеры, F — полный экран, звук
      ====================================================================== */
-  const hint = $('#sound-hint');
   function unlockAudio() { window.Sfx.unlock(); hint.classList.add('gone'); }
   function toggleFS() {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
@@ -952,11 +954,7 @@
     if (t) { e.preventDefault(); Store.dispatch({ type: 'buzz', teamId: t.id }); return; }
     if (e.code === 'KeyF') toggleFS();
   });
-  $('#btn-fs').addEventListener('click', toggleFS);
-  const muteBtn = $('#btn-mute');
-  const syncMute = () => { muteBtn.textContent = window.Sfx.isMuted() ? '🔇' : '🔊'; };
-  muteBtn.addEventListener('click', () => { window.Sfx.toggle(); syncMute(); });
-  syncMute();
+  // кнопок звука и полного экрана на экране гостей нет: F — полный экран, звук глушится с пульта
 
   let idleT = 0;
   window.addEventListener('mousemove', () => {

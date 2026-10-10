@@ -408,6 +408,7 @@
     return `
       <section class="card">
         <h2>Музыка <span class="sp"></span><button class="btn sm ${m.enabled ? 'lime' : ''}" data-act="musicToggle">${m.enabled ? '🎵 вкл' : '🔇 выкл'}</button></h2>
+        <button class="btn wide ${m.muted ? 'pink' : ''}" style="margin-bottom:10px" data-act="screenMute">${m.muted ? '🔇 звук на экране выключен — включить' : '🔊 звук на экране включён — заглушить'}</button>
         <div class="mus-vol"><span>музыка</span><input type="range" min="0" max="100" value="${Math.round(m.volume * 100)}" data-music-range="volume" aria-label="громкость музыки"></div>
         <div class="mus-vol"><span>эффекты</span><input type="range" min="0" max="100" value="${Math.round(m.sfx * 100)}" data-music-range="sfx" aria-label="громкость эффектов"></div>
         ${slots}
@@ -530,6 +531,7 @@
       case 'finalJudge': d({ type: 'finalJudge', teamId: id, correct: b.dataset.ok === '1' }); break;
       case 'showWinner': d({ type: 'showWinner' }); break;
       case 'backToFinal': d({ type: 'backToFinal' }); break;
+      case 'screenMute': d({ type: 'musicSet', patch: { muted: !(s.music && s.music.muted) } }); break;
       case 'musicToggle': d({ type: 'musicSet', patch: { enabled: !(s.music && s.music.enabled === false ? false : true) } }); break;
       case 'musicDel': {
         const key = b.dataset.key;

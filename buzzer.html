@@ -8,15 +8,14 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Manrope:wght@600;700;800&family=Unbounded:wght@700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/base.css?v=202610102050">
-  <link rel="stylesheet" href="css/buzzer.css?v=202610102050">
+  <link rel="stylesheet" href="css/base.css?v=202610111558">
+  <link rel="stylesheet" href="css/buzzer.css?v=202610111558">
 </head>
 <body>
   <header class="bar">
     <span class="room">комната <b id="room-code">—</b></span>
     <span class="net" id="net"><i></i><span>подключаемся…</span></span>
   </header>
-  <div class="diag" id="diag"></div>
 
   <!-- вход: новая команда или существующая -->
   <main id="join" class="screen" hidden>
@@ -39,7 +38,6 @@
       </div>
       <div class="emojis" id="emojis"></div>
       <button class="btn lime big" id="create">СОЗДАТЬ И ИГРАТЬ →</button>
-      <p class="muted" id="host-hint" hidden>Открой пульт ведущего на ноутбуке — без него не подключиться. Как только он появится, заявка уйдёт сама.</p>
     </section>
     <div class="notice" id="join-msg" hidden></div>
     <section class="card" id="restore-card" hidden>
@@ -55,6 +53,7 @@
       <button class="me-chip" id="me-chip" aria-label="меню команды"></button>
       <span class="score" id="score">0</span>
     </div>
+    <div class="sync" id="sync" hidden>синхронизируемся…</div>
     <div class="btn-wrap">
       <button id="big" class="big-btn" aria-label="баззер">
         <span class="lbl" id="lbl">ЖДЁМ</span>
@@ -63,6 +62,13 @@
     </div>
     <div class="status" id="status"></div>
   </main>
+
+  <!-- связь: спрятано, чтобы не пугать; раскрывается по тапу -->
+  <details class="netbox" id="netbox">
+    <summary>ⓘ связь</summary>
+    <div class="diag" id="diag"></div>
+    <p class="host-hint" id="host-hint" hidden>Пульт ведущего не отвечает. Он должен быть открыт на ноутбуке ведущего — как только появится, всё подключится само.</p>
+  </details>
 
   <!-- меню команды: сменить аватар -->
   <div id="menu" class="sheet-bg" hidden>
@@ -79,12 +85,12 @@
   </div>
 
   <!-- связь с телефонами: библиотеки лежат локально (CDN бывают заблокированы) -->
-  <script src="js/vendor/mqtt-5.10.1.min.js?v=202610102050"></script>
-  <script src="js/vendor/peerjs-1.5.4.min.js?v=202610102050"></script>
-  <script src="js/qr.js?v=202610102050"></script>
-  <script src="js/net.js?v=202610102050"></script>
-  <script src="js/audio.js?v=202610102050"></script>
-  <script src="js/avatar.js?v=202610102050"></script>
-  <script src="js/buzzer.js?v=202610102050"></script>
+  <script src="js/vendor/mqtt-5.10.1.min.js?v=202610111558"></script>
+  <script src="js/vendor/peerjs-1.5.4.min.js?v=202610111558"></script>
+  <script src="js/qr.js?v=202610111558"></script>
+  <script src="js/net.js?v=202610111558"></script>
+  <script src="js/audio.js?v=202610111558"></script>
+  <script src="js/avatar.js?v=202610111558"></script>
+  <script src="js/buzzer.js?v=202610111558"></script>
 </body>
 </html>

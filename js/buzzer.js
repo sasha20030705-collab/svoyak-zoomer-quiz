@@ -33,8 +33,8 @@
     try { localStorage.setItem(CID_KEY, clientId); } catch (e) { /* ignore */ }
   }
   let myTeam = saved.teamId || null;
-  function save() { try { localStorage.setItem(KEY, JSON.stringify({ teamId: myTeam })); } catch (e) { /* ignore */ } }
-  save();
+  // заявка «создать» тоже переживает перезагрузку телефона (пока пульт её не подтвердил)
+  function save() { try { localStorage.setItem(KEY, JSON.stringify({ teamId: myTeam, pending: myTeam ? null : pendingCreate })); } catch (e) { /* ignore */ } }
 
   let state = null;            // последнее состояние от пульта
   let netStatus = 'connecting';
@@ -64,7 +64,11 @@
   if (!roomKey) { try { roomKey = localStorage.getItem('svoyak:k:' + room) || ''; } catch (e) { /* ignore */ } }
   const brokerHint = params.has('b') ? parseInt(params.get('b'), 10) : 0;
   let netInfo = null;          // диагностика от транспорта
-  let pendingCreate = null;    // заявка, отправим, когда появится ведущий
+  let pendingCreate = saved.pending && saved.pending.t === 'create' && !saved.teamId ? saved.pending : null; // переотправляем, пока пульт не ответит joined
+  let optimistic = pendingCreate ? { name: pendingCreate.name, emoji: pendingCreate.emoji, avatar: pendingCreate.avatar } : null; // команда, показанная сразу (до ответа пульта)
+  let queuedBuzz = null;       // одно нажатие, сделанное до подтверждения
+  let lastCreateSent = 0;
+  let noHostSince = Date.now();
   let joiningAt = 0;
   let joinedRev = -1;
   let lastHello = 0;
@@ -94,8 +98,7 @@
       netInfo = info || null;
       if (st === 'online') {
         client.send({ t: 'hello', teamId: myTeam });
-        // нажали «создать», пока ведущего не было — отправляем заявку сейчас
-        if (pendingCreate && !myTeam) { client.send(pendingCreate); joining = true; pendingCreate = null; notice = ''; }
+        if (pendingCreate && !myTeam) sendCreate();
       }
       render();
     },
@@ -115,8 +118,18 @@
         if (typeof m.rev === 'number' && m.rev < joinedRev) return; // ответ на старый запрос
         joinedRev = typeof m.rev === 'number' ? m.rev : joinedRev;
         joining = false;
-        if (m.teamId) { myTeam = m.teamId; save(); keepAwake(); notice = ''; }
-        else {
+        if (m.teamId) {
+          myTeam = m.teamId; save(); keepAwake(); notice = '';
+          optimistic = null; pendingCreate = null;
+          // нажали до подтверждения — отправляем, только если вопрос всё ещё открыт
+          if (queuedBuzz && state && state.armed && state.qid === queuedBuzz.qid && !(state.wrong || []).includes(myTeam)) {
+            pressedQid = state.qid;
+            client.send({ t: 'buzz', teamId: myTeam, clientTs: queuedBuzz.at });
+          } else $('big').classList.remove('down');
+          queuedBuzz = null;
+        } else if (optimistic) {
+          // пульт ещё не обработал нашу заявку (ответ на hello) — ждём, заявка переотправится
+        } else {
           if (myTeam && m.reason === 'unbound') notice = 'Ведущий отвязал этот телефон от команды. Создай новую или восстанови свою.';
           myTeam = null; myAvatar = null; save();
         }
@@ -126,6 +139,9 @@
       } else if (m.t === 'err') {
         joining = false;
         if (ERR_TEXT[m.code]) notice = ERR_TEXT[m.code];
+        if (optimistic && ['name', 'name-taken', 'name-free', 'full'].includes(m.code)) {
+          optimistic = null; pendingCreate = null; queuedBuzz = null; save(); // назад на форму
+        }
       } else if (m.t === 'buzzResult') {
         if (m.result === 'won') { if (state && wonQid !== state.qid) celebrate(state.qid); }
         else if (m.result === 'early') setFlash('early', 1300);
@@ -152,6 +168,12 @@
     window.Sfx.unlock();
     keepAwake();
     const btn = $('big');
+    if (!myTeam && optimistic) {
+      // ещё синхронизируемся: копим максимум одно нажатие
+      if (state && state.armed && !queuedBuzz) { queuedBuzz = { qid: state.qid, at: Date.now() }; btn.classList.add('down'); vibrate(30); return; }
+      if (state && state.phase === 'question' && state.stage === 'question') return;
+      setFlash('early', 1300); vibrate(120); render(); return;
+    }
     if (!state || netStatus !== 'online' || !myTeam) { btn.classList.remove('shake'); void btn.offsetWidth; btn.classList.add('shake'); return; }
     const s = state;
     if (s.phase === 'setup') { client.send({ t: 'buzz', teamId: myTeam, clientTs: Date.now() }); return; }
@@ -222,17 +244,22 @@
     window.Sfx.unlock();
     const name = $('team-name').value.trim();
     if (!name) { $('team-name').focus(); setFlash('name', 2000); render(); return; }
-    const msg = { t: 'create', name, emoji: pickedEmoji, avatar: pendingAvatar };
-    if (netStatus !== 'online' || !client || !client.send(msg)) {
-      // связи с ведущим нет — запоминаем заявку и отправим сами, как только он появится
-      pendingCreate = msg;
-      notice = 'Заявка сохранена — отправим, как только ведущий появится на связи.';
-      render();
-      return;
-    }
-    joining = true;
+    // подтверждения ведущего не ждём: сразу показываем свою кнопку, заявка уходит в фоне
+    pendingCreate = { t: 'create', name, emoji: pickedEmoji, avatar: pendingAvatar };
+    optimistic = { name, emoji: pickedEmoji, avatar: pendingAvatar };
+    notice = '';
+    save();
+    keepAwake();
+    sendCreate();
     render();
   }
+  /** Отправить (или повторить) заявку. Пульт узнаёт повтор по clientId и просто отвечает joined. */
+  function sendCreate() {
+    if (!pendingCreate || !client) return;
+    lastCreateSent = Date.now();
+    client.send(pendingCreate);
+  }
+  $('team-name').addEventListener('input', () => render());
   $('create').addEventListener('click', createTeam);
   $('team-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') createTeam(); });
   $('teams').addEventListener('click', (e) => {
@@ -255,6 +282,11 @@
       + (hostOk ? '' : `<span class="diag-more">${bro}${inf.key ? ' · ключ ' + inf.key : ''} <button type="button" id="net-retry">🔄 переподключиться</button></span>`);
     if (html !== diagSig) { diagSig = html; $('diag').innerHTML = html; }
     $('diag').classList.toggle('ok', hostOk);
+    const longNoHost = !hostOk && noHostSince && Date.now() - noHostSince > 20000;
+    $('host-hint').hidden = !longNoHost;
+    const sum = $('netbox').querySelector('summary');
+    const want = hostOk ? 'ⓘ связь' : longNoHost ? 'ⓘ связь — пульт не отвечает' : 'ⓘ связь — подключаемся';
+    if (sum.textContent !== want) sum.textContent = want;
   }
   document.addEventListener('click', (e) => {
     if (e.target && e.target.id === 'net-retry' && client) { (client.reconnectAll || client.reconnect)(); diagSig = ''; }
@@ -263,14 +295,17 @@
 
   function render() {
     const net = $('net');
-    net.className = 'net ' + (netStatus === 'online' ? 'online' : (netStatus === 'connecting' ? '' : 'bad'));
-    net.querySelector('span').textContent = NET_TEXT[netStatus] || netStatus;
+    // в шапке — только комната и точка: зелёная (на связи) / жёлтая (подключаемся)
+    net.className = 'net ' + (netStatus === 'online' ? 'online' : '');
+    net.title = NET_TEXT[netStatus] || netStatus;
+    if (netStatus === 'online') noHostSince = 0; else if (!noHostSince) noHostSince = Date.now();
+    if (pendingCreate && !myTeam && netStatus === 'online' && Date.now() - lastCreateSent > 3000) sendCreate();
     if (flash && Date.now() > flash.until) flash = null;
     // ведущий не ответил на заявку — не оставляем кнопку висеть
     if (joining && !joiningAt) joiningAt = Date.now();
     if (!joining) joiningAt = 0;
     if (joining && Date.now() - joiningAt > 9000) {
-      joining = false; joiningAt = 0; notice = 'Ведущий не ответил. Нажми ещё раз.';
+      joining = false; joiningAt = 0; notice = 'Пульт пока не ответил — попробуй ещё раз.';
       if (client) client.send({ t: 'hello' }); // вдруг команда уже создана, а ответ потерялся — пульт напомнит
     }
     // на экране входа периодически «здороваемся»: пульт вернёт нашу команду, если она есть
@@ -278,7 +313,12 @@
     renderDiag();
     $('no-room').hidden = !!room;
 
-    const team = state && myTeam && state.teams.find((t) => t.id === myTeam);
+    let team = state && myTeam && state.teams.find((t) => t.id === myTeam);
+    if (!team && optimistic) {
+      // до ответа пульта — локальная «заглушка»: своё название, эмодзи/аватар, цвет по умолчанию
+      team = { id: null, name: optimistic.name, emoji: optimistic.emoji, color: '#C6FF00', score: 0, av: optimistic.avatar ? 1 : 0, optimistic: true };
+    }
+    $('sync').hidden = !(team && team.optimistic);
     const showJoin = !team;
     $('join').hidden = !showJoin;
     $('buzz').hidden = showJoin;
@@ -298,26 +338,23 @@
     $('join-msg').hidden = !msg;
     $('join-msg').textContent = msg;
     const c = $('create');
-    const waiting = netStatus !== 'online';
-    c.disabled = joining;
-    c.classList.toggle('waiting', waiting && !joining);
-    $('host-hint').hidden = !waiting;
+    c.disabled = joining || !$('team-name').value.trim();
     c.textContent = joining ? 'ПОДКЛЮЧАЕМ…'
-      : waiting ? (pendingCreate ? 'ЖДЁМ ВЕДУЩЕГО… ЗАЯВКА В ОЧЕРЕДИ' : 'ЖДЁМ ВЕДУЩЕГО…')
       : flash && flash.kind === 'name' ? 'ВПИШИ НАЗВАНИЕ'
         : flash && flash.kind === 'offline' ? 'НЕТ СВЯЗИ С ВЕДУЩИМ'
           : 'СОЗДАТЬ И ИГРАТЬ →';
   }
 
   function renderBuzz(team) {
-    const s = state;
+    // состояния от пульта ещё нет (только что создали команду) — рисуем спокойное «ждём»
+    const s = state || { phase: 'setup', teams: [], wrong: [], armed: false };
     const btn = $('big');
     btn.style.setProperty('--tc', team.color);
     btn.style.setProperty('--tx', textOn(team.color));
     const sig = [team.id, team.emoji, team.name, team.av, myAvatar ? myAvatar.length : 0].join('|');
     if (sig !== avatarSig) {
       avatarSig = sig;
-      $('me-chip').innerHTML = `<span class="av" style="background:${team.color}">${avHtml(team.av ? myAvatar : null, team.emoji)}</span><span class="n">${esc(team.name)}</span><span>⚙︎</span>`;
+      $('me-chip').innerHTML = `<span class="av" style="background:${team.color}">${avHtml(team.av ? (team.optimistic ? optimistic.avatar : myAvatar) : null, team.emoji)}</span><span class="n">${esc(team.name)}</span><span>⚙︎</span>`;
       if (!$('menu').hidden) renderMenu();
     }
     $('score').textContent = team.score;
@@ -325,7 +362,7 @@
     const tName = (id) => { const t = s.teams.find((x) => x.id === id); return t ? t.name : '…'; };
     let lbl = 'ЖДЁМ', sub = '', cls = 'idle', status = '';
     const q = s.phase === 'question';
-    if (netStatus !== 'online') { lbl = 'НЕТ СВЯЗИ'; sub = 'переподключаемся…'; cls = 'blocked'; }
+    if (!state) { lbl = 'ГОТОВО'; sub = 'команда создана — ждём начала игры'; cls = ''; status = 'вы в игре'; }
     else if (flash && flash.kind === 'early') { lbl = 'РАНО!'; sub = 'вопрос ещё не открыт'; cls = 'blocked'; }
     else if (flash && flash.kind === 'test') { lbl = 'НА СВЯЗИ'; sub = 'кнопка работает ✓'; cls = ''; }
     else if (s.phase === 'setup') { lbl = 'ТЕСТ'; sub = 'жми — проверим связь'; cls = ''; status = 'игра скоро начнётся'; }

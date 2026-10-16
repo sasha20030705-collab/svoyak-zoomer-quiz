@@ -382,6 +382,9 @@
     }
     $('sync').hidden = !(team && team.optimistic);
     const showJoin = !team;
+    // фон телефона не должен сливаться с цветом команды: синей — розовый, фиолетовой — оранжевый
+    const bg = showJoin ? '' : BG_FOR[String(team.color || '').toUpperCase()] || '';
+    if (document.body.style.getPropertyValue('--bg-c') !== bg) { if (bg) document.body.style.setProperty('--bg-c', bg); else document.body.style.removeProperty('--bg-c'); }
     $('join').hidden = !showJoin;
     $('buzz').hidden = showJoin;
     if (showJoin) renderJoin(); else renderBuzz(team);
@@ -406,6 +409,8 @@
         : flash && flash.kind === 'offline' ? 'НЕТ СВЯЗИ С ВЕДУЩИМ'
           : 'СОЗДАТЬ И ИГРАТЬ →';
   }
+
+  const BG_FOR = { '#2B4BFF': 'var(--pink)', '#A259FF': 'var(--orange)' };
 
   function renderBuzz(team) {
     // состояния от пульта ещё нет (только что создали команду) — рисуем спокойное «ждём»
@@ -452,9 +457,10 @@
     else if (s.phase === 'board') { lbl = 'ЖДЁМ ВОПРОС'; sub = 'выбирают ячейку'; }
     else if (s.phase === 'final') { lbl = 'ФИНАЛ'; sub = 'пишите ответ на бумажке'; }
     else if (s.phase === 'winner') {
-      // место = 1 + сколько команд набрали строго больше (при равенстве — общее место)
+      // места как на экране (QuizUtil.placesOf): равный счёт — одно место, следующее — +1
       const me = s.teams.find((t) => t.id === myTeam);
-      const place = me ? 1 + s.teams.filter((t) => t.score > me.score).length : s.teams.length;
+      const scores = [...new Set(s.teams.map((t) => t.score))].sort((a, b) => b - a);
+      const place = me ? scores.indexOf(me.score) + 1 : s.teams.length;
       const tie = me && s.teams.some((t) => t.id !== me.id && t.score === me.score);
       lbl = place === 1 ? (tie ? 'НИЧЬЯ!' : 'ПОБЕДА!') : `#${place}`;
       sub = place === 1 ? (tie ? 'делите корону' : 'корона ваша') : 'gg, было мощно';

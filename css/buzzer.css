@@ -81,9 +81,6 @@ input:focus { outline: 3px solid var(--blue); outline-offset: 2px; }
 .status { min-height: 46px; padding: 10px 16px; border: 4px solid var(--black); border-radius: 12px; background: var(--white); box-shadow: 4px 4px 0 var(--black); font: 800 15px/1.25 var(--font-head); text-align: center; text-transform: uppercase; transform: rotate(1deg); max-width: 100%; }
 .status:empty { visibility: hidden; }
 .link { background: none; border: 0; color: var(--white); font: 700 14px var(--font-body); text-decoration: underline; padding: 6px; }
-/* фон телефона не должен сливаться с цветом команды (синяя/фиолетовая команда на синем фоне) */
-body:has(#buzz:not([hidden]) #big[style*="2B4BFF" i]) { --bg-c: var(--pink); }
-body:has(#buzz:not([hidden]) #big[style*="A259FF" i]) { --bg-c: var(--orange); }
 body.flash-won { animation: flash-won .6s steps(3); }
 @keyframes flash-won { 0%, 100% { background-color: var(--bg-c, var(--blue)); } 33% { background-color: var(--lime); } 66% { background-color: var(--white); } }
 

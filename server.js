@@ -78,7 +78,8 @@ function handleSub(req, res, q) {
   const sub = { res, patterns, will };
   subs.add(sub);
   retained.forEach((payload, topic) => { if (patterns.some((p) => matches(p, topic))) res.write('data: ' + JSON.stringify({ topic, payload }) + '\n\n'); });
-  const ka = setInterval(() => { try { res.write(': ping\n\n'); } catch (e) { /* ignore */ } }, 15000);
+  // пульс: и держит соединение, и даёт странице заметить «зависшее» соединение (js/net.js, сторож sseLink)
+  const ka = setInterval(() => { try { res.write('data: {"topic":"$ping"}\n\n'); } catch (e) { /* ignore */ } }, 5000);
   req.on('close', () => {
     clearInterval(ka);
     subs.delete(sub);

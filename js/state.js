@@ -174,6 +174,25 @@
     if (s.history.length > MAX_HISTORY) s.history.shift();
   }
 
+  /** Финал уже начали: есть ставки или оценки, или ушли дальше заставки. */
+  function finalStarted(f) {
+    return !!(f && (Object.keys(f.bets || {}).length || Object.keys(f.results || {}).length || (f.stage && f.stage !== 'intro')));
+  }
+
+  /** Максимальная ставка финала: от 0 до счёта (при счёте ≤ 0 — только 0). */
+  function finalMaxBet(t) { return Math.max(0, (t && t.score) || 0); }
+
+  /** Ставка аукциона: от номинала до max(счёт владельца, номинал). withMin — поднять до номинала. */
+  function clampAuctionBet(s, bet, withMin) {
+    const cur = s.current;
+    const nominal = cellValue(cur.r, cur.c, cur.q);
+    let b = Math.max(0, Math.round(Number(bet) || 0));
+    const owner = cur.owner && team(s, cur.owner);
+    if (owner) b = Math.min(b, Math.max(owner.score, nominal));
+    if (withMin && b < nominal) b = nominal;
+    return b;
+  }
+
   function pauseTimer(s) {
     const t = s.timer;
     if (t.running) { t.remaining = Math.max(0, t.endsAt - now()); t.running = false; }
@@ -259,19 +278,29 @@
       }
 
       case 'setOwner':
-        if (s.current) { s.current.owner = a.teamId; emit(s, { kind: 'owner', teamId: a.teamId }); }
+        if (s.current) {
+          s.current.owner = a.teamId;
+          if (s.current.special === 'auction' && s.current.bet) s.current.bet = clampAuctionBet(s, s.current.bet, false);
+          emit(s, { kind: 'owner', teamId: a.teamId });
+        }
         break;
-      case 'setBet':
-        if (s.current) s.current.bet = Math.max(0, Math.round(Number(a.bet) || 0));
+      case 'setBet': // пока печатают — режем только сверху; минимум (номинал) — при показе вопроса
+        if (s.current) s.current.bet = s.current.special === 'auction' ? clampAuctionBet(s, a.bet, false) : Math.max(0, Math.round(Number(a.bet) || 0));
         break;
       case 'showQuestion':
-        if (s.current) { s.current.stage = 'question'; emit(s, { kind: 'showQuestion' }); }
+        if (s.current) {
+          if (s.current.special === 'auction') s.current.bet = clampAuctionBet(s, s.current.bet, true);
+          s.current.stage = 'question';
+          emit(s, { kind: 'showQuestion' });
+        }
         break;
 
       case 'judge': {
         const cur = s.current;
         const t = team(s, a.teamId);
         if (!cur || !t || cur.stage === 'answer') break;
+        // повторный ✗ той же команде (двойной клик) — не списываем второй раз
+        if (!a.correct && cur.wrong.includes(t.id)) break;
         const d = currentValue(s);
         snapshot(s, `${t.emoji} ${t.name} ${a.correct ? '+' : '−'}${d}`);
         if (a.correct) {
@@ -393,7 +422,9 @@
       case 'gotoFinal':
         s.phase = 'final';
         s.current = null;
-        s.final = { stage: 'intro', bets: {}, results: {} };
+        // финал уже начат (есть ставки/оценки) — возвращаемся в него, а не пересоздаём:
+        // иначе команды можно оценить второй раз и очки начислятся повторно
+        if (!finalStarted(s.final)) s.final = { stage: 'intro', bets: {}, results: {} };
         s.timer = freshTimer(qDur(s));
         s.buzzer = { winner: null, at: 0 };
         emit(s, { kind: 'final' });
@@ -404,9 +435,13 @@
         if (a.stage === 'question') s.timer = freshTimer(qDur(s));
         emit(s, { kind: 'finalStage', stage: a.stage });
         break;
-      case 'finalBet':
-        s.final.bets[a.teamId] = Math.max(0, Math.round(Number(a.bet) || 0));
+      case 'finalBet': { // от 0 до счёта команды; пустое поле — ставки нет (считается как 0)
+        const t = team(s, a.teamId);
+        if (!t || s.final.results[t.id] !== undefined) break;
+        if (a.bet === '' || a.bet === null || a.bet === undefined) { delete s.final.bets[t.id]; break; }
+        s.final.bets[t.id] = Math.min(Math.max(0, t.score), Math.max(0, Math.round(Number(a.bet) || 0)));
         break;
+      }
       case 'finalJudge': {
         const t = team(s, a.teamId);
         if (!t || s.final.results[t.id] !== undefined) break;
@@ -514,5 +549,19 @@
     applyRemote(next) { if (!next) return; state = next; notify(null); },
     setClockSkew(ms) { clockSkew = Number(ms) || 0; },
   };
-  window.QuizUtil = { now: syncedNow, makeRoom, makeKey, RESERVED_KEYS, cellKey, keyLabel, textOn, timerRemaining, getQ, cellValue, currentValue, PALETTE, EMOJIS, DEFAULT_KEYS };
+  /** Места с учётом ничьих (плотная нумерация: 1, 1, 2, 3…). Возвращает [{place, teams:[…], score}]. */
+  function placesOf(teams) {
+    const sorted = (teams || []).slice().sort((a, b) => b.score - a.score);
+    const groups = [];
+    sorted.forEach((t) => {
+      const g = groups[groups.length - 1];
+      if (g && g.score === t.score) g.teams.push(t);
+      else groups.push({ place: groups.length + 1, score: t.score, teams: [t] });
+    });
+    return groups;
+  }
+  /** Счёт с настоящим минусом: −400, а не -400. */
+  function fmtScore(n) { const v = Math.round(Number(n) || 0); return v < 0 ? '\u2212' + Math.abs(v) : String(v); }
+
+  window.QuizUtil = { now: syncedNow, placesOf, fmtScore, finalMaxBet, finalStarted, makeRoom, makeKey, RESERVED_KEYS, cellKey, keyLabel, textOn, timerRemaining, getQ, cellValue, currentValue, PALETTE, EMOJIS, DEFAULT_KEYS };
 })();

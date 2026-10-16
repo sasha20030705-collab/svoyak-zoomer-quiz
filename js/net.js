@@ -6,7 +6,8 @@
        host.broadcast(msg)        — всем телефонам
        host.send(clientId, msg)   — одному клиенту (телефону или экрану)
        host.close(silent)
-     const client = Net.createClient({ room, key, clientId, onMessage(msg), onStatus(status, info), onKey(key) })
+     const client = Net.createClient({ room, key, clientId, onMessage(msg), onStatus(status, info), onKey(key), onMoved(room, key) })
+       onStatus зовётся только при смене статуса; onMoved — пульт сменил комнату, клиент уже переехал сам
        client.send(msg) → true/false
        client.reconnect()          — переподключиться ко всем серверам
        client.info()               — живая диагностика
@@ -34,7 +35,10 @@
 
   const PREFIX = 'svoyak-';
   const CLIENT_PING_MS = 4000;     // клиент пингует хоста
-  const CLIENT_WATCHDOG_MS = 20000; // нет вестей от хоста столько — «ведущий не найден»
+  const CLIENT_WATCHDOG_MS = 12000; // нет вестей от хоста столько — «ведущий не найден» (пинг каждые 4 с)
+  const HOST_FRESH_MS = 10000;     // пульт отвечал недавно — will «offline» одного брокера не считаем уходом пульта
+  const WAKE_QUIET_MS = 6000;      // вернулись на вкладку, а пульт молчит дольше — переподключаем всё
+  const MOVED_REPEAT_MS = 120000;  // сколько пульт повторяет «переехали» в старую комнату
   const noop = () => {};
 
   /* ---------------------------------------------------------------- PeerJS */
@@ -199,31 +203,63 @@
     return { seen(id) { if (!id) return false; if (set.has(id)) return true; set.add(id); q.push(id); if (q.length > max) set.delete(q.shift()); return false; } };
   }
 
+  // переподключение к брокеру: сами, с нарастающей паузой (mqtt.js с фиксированным интервалом
+  // и коротким connectTimeout мог так и не дождаться медленного брокера)
+  const RETRY_MS = [1000, 2000, 4000, 8000, 15000, 30000];
+  const LINK_DEAD_MS = 8000;       // отправили QoS1 и ни одного пакета в ответ столько — соединение мёртвое
+  const LINK_CHECK_MS = 2000;
+
   /** Линк к одному MQTT-брокеру. */
   function mqttLink(def, { will, onMessage, onState }) {
     const L = { name: def.name, state: 'connecting', err: '', lastAt: 0, topics: [], onconnect: noop };
-    let cl = null, t0 = 0;
+    let cl = null, t0 = 0, retryT = 0, tries = 0, dead = false;
+    let waitSince = 0;             // с какого момента ждём хоть какой-то ответ брокера (PUBACK и т.п.)
+    function retry(why) {
+      if (dead || retryT) return;
+      const ms = RETRY_MS[Math.min(tries, RETRY_MS.length - 1)];
+      tries++;
+      L.err = (why || L.err || 'нет связи').replace(/ · повтор.*$/, '').slice(0, 60) + ' · повтор через ' + Math.round(ms / 1000) + ' с';
+      retryT = setTimeout(() => { retryT = 0; if (!dead) L.open(); }, ms);
+    }
     L.open = () => {
-      clearTimeout(t0);
+      dead = false;
+      clearTimeout(t0); clearTimeout(retryT); retryT = 0;
+      waitSince = 0;
+      L.err = L.err.replace(/ · повтор.*$/, '');
       try { if (cl) cl.end(true); } catch (e) { /* ignore */ }
       L.state = 'connecting'; onState();
-      const opts = Object.assign({ clientId: 'svoyak-' + rnd(6), keepalive: 30, reconnectPeriod: 5000, connectTimeout: 5000, clean: true }, def.auth || {});
+      const opts = Object.assign({ clientId: 'svoyak-' + rnd(6), keepalive: 15, reconnectPeriod: 0, connectTimeout: 12000, clean: true }, def.auth || {});
       if (will) opts.will = { topic: will.topic, payload: JSON.stringify({ d: will.payload }), qos: 1, retain: !!will.retain };
-      const my = window.mqtt.connect(def.url, opts);
+      let my;
+      try { my = window.mqtt.connect(def.url, opts); } catch (e) { cl = null; L.state = 'fail'; retry(String(e && e.message || e)); onState(); return; }
       cl = my;
+      // 5 с — только для индикатора; само соединение ждём до connectTimeout (медленный брокер всё равно подключится)
       t0 = setTimeout(() => { if (cl === my && L.state === 'connecting') { L.state = 'fail'; L.err = L.err || 'нет ответа 5 с'; onState(); } }, 5000);
       my.on('connect', () => {
         if (cl !== my) return;
         clearTimeout(t0);
+        tries = 0; waitSince = 0;
         L.state = 'ok'; L.err = ''; L.lastAt = Date.now();
         if (L.topics.length) my.subscribe(L.topics, { qos: 1 });
         onState(); L.onconnect();
       });
+      my.on('packetreceive', () => { if (cl === my) waitSince = 0; });
       my.on('message', (topic, payload) => { if (cl !== my) return; L.lastAt = Date.now(); const m = parse(payload); if (m) onMessage(L, topic, m); });
-      const down = (e) => { if (cl !== my) return; if (e && e.message) L.err = e.message.slice(0, 60); if (L.state !== 'fail') { L.state = 'fail'; onState(); } };
+      const down = (e) => {
+        if (cl !== my) return;
+        if (e && e.message) L.err = e.message.slice(0, 60);
+        retry();
+        if (L.state !== 'fail') { L.state = 'fail'; onState(); }
+      };
       my.on('error', down); my.on('offline', () => down()); my.on('close', () => down());
-      my.on('reconnect', () => { if (cl === my && L.state !== 'ok') { L.state = 'connecting'; onState(); } });
     };
+    // «полуоткрытое» соединение (Wi-Fi→LTE, сон телефона): TCP жив, но ничего не ходит.
+    // keepalive mqtt.js тут не поможет — мы сами всё время что-то шлём, и он не пингует.
+    const watch = setInterval(() => {
+      if (dead || !cl || L.state !== 'ok' || !waitSince || Date.now() - waitSince < LINK_DEAD_MS) return;
+      L.err = 'соединение зависло — переподключаемся';
+      L.open();
+    }, LINK_CHECK_MS);
     L.setTopics = (topics) => {
       const old = L.topics; L.topics = topics;
       if (cl && L.state === 'ok') {
@@ -234,16 +270,19 @@
     };
     L.publish = (topic, obj, o = {}) => {
       if (!cl || L.state !== 'ok') return false;
-      try { cl.publish(topic, JSON.stringify(obj), { qos: o.qos == null ? 0 : o.qos, retain: !!o.retain }); return true; } catch (e) { return false; }
+      const qos = o.qos == null ? 0 : o.qos;
+      try { cl.publish(topic, JSON.stringify(obj), { qos, retain: !!o.retain }); } catch (e) { return false; }
+      if (qos > 0 && !waitSince) waitSince = Date.now();
+      return true;
     };
-    L.close = () => { clearTimeout(t0); try { if (cl) cl.end(true); } catch (e) { /* ignore */ } cl = null; };
+    L.close = () => { dead = true; clearTimeout(t0); clearTimeout(retryT); retryT = 0; clearInterval(watch); try { if (cl) cl.end(true); } catch (e) { /* ignore */ } cl = null; };
     return L;
   }
 
   /** Линк к локальному server.js: SSE (приём) + POST (отправка). */
   function sseLink(def, { will, onMessage, onState }) {
     const L = { name: def.name, state: 'connecting', err: '', lastAt: 0, topics: [], onconnect: noop };
-    let es = null;
+    let es = null, lastRx = 0, pings = false;
     function reopen() {
       try { if (es) es.close(); } catch (e) { /* ignore */ }
       es = null;
@@ -252,30 +291,43 @@
       if (will) q.set('will', JSON.stringify({ topic: will.topic, payload: { d: will.payload }, retain: !!will.retain }));
       const my = new EventSource(def.base + '/relay/sub?' + q.toString());
       es = my;
-      my.onopen = () => { if (es !== my) return; L.state = 'ok'; L.err = ''; L.lastAt = Date.now(); onState(); L.onconnect(); };
-      my.onmessage = (e) => { if (es !== my) return; L.lastAt = Date.now(); const m = parse(e.data); if (m && m.topic) onMessage(L, m.topic, m.payload); };
+      lastRx = Date.now();
+      my.onopen = () => { if (es !== my) return; lastRx = Date.now(); L.state = 'ok'; L.err = ''; L.lastAt = Date.now(); onState(); L.onconnect(); };
+      my.onmessage = (e) => {
+        if (es !== my) return;
+        lastRx = Date.now();
+        const m = parse(e.data);
+        if (m && m.topic === '$ping') { pings = true; return; } // пульс server.js — только для сторожа
+        L.lastAt = Date.now();
+        if (m && m.topic) onMessage(L, m.topic, m.payload);
+      };
       my.onerror = () => { if (es !== my) return; if (L.state === 'ok') { L.state = 'connecting'; L.err = 'обрыв, переподключаемся'; onState(); } };
     }
+    // server.js шлёт пульс каждые 5 с: тишина дольше — соединение зависло (сон телефона, смена сети)
+    const watch = setInterval(() => { if (pings && es && Date.now() - lastRx > 12000) { L.err = 'соединение зависло — переподключаемся'; L.state = 'connecting'; onState(); reopen(); } }, LINK_CHECK_MS);
     L.open = () => { L.state = 'connecting'; onState(); reopen(); };
     L.setTopics = (t) => { L.topics = t; if (L.state === 'ok' || es) reopen(); };
     L.publish = (topic, obj, o = {}) => {
       if (L.state !== 'ok') return false;
       try {
-        fetch(def.base + '/relay/pub', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topic, payload: obj, retain: !!o.retain }), keepalive: true })
+        // keepalive — только для прощальных сообщений: у Chrome лимит 64 КБ на все такие запросы разом,
+        // и аватары (≈50 КБ) с keepalive просто не уходили
+        fetch(def.base + '/relay/pub', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topic, payload: obj, retain: !!o.retain }), keepalive: !!o.urgent })
           .catch(() => { L.err = 'не отправилось'; });
         return true;
       } catch (e) { return false; }
     };
-    L.close = () => { try { if (es) es.close(); } catch (e) { /* ignore */ } es = null; };
+    L.close = () => { clearInterval(watch); try { if (es) es.close(); } catch (e) { /* ignore */ } es = null; };
     return L;
   }
 
   function linkInfo(links) { return links.map((l) => ({ name: l.name, state: l.state, err: l.err, lastAt: l.lastAt })); }
 
   /** Пульт поверх набора линков. */
-  function pubsubHost(defs, makeLink, { room, key, onMessage = noop, onStatus = noop }) {
+  function pubsubHost(defs, makeLink, { room, key, movedFrom, onMessage = noop, onStatus = noop }) {
     const base = TOPIC + key + '/';
     const hid = 'h' + rnd(5);
+    const t0 = Date.now();
     let seq = 0, closed = false, lastIn = null;
     const wrap = (d) => ({ i: hid + ':' + (++seq), d });
     const dd = Dedupe();
@@ -292,6 +344,14 @@
     function presence(l) {
       l.publish(base + 'host', { d: { online: true, at: Date.now() } }, { qos: 1, retain: true });
       l.publish(TOPIC + 'lobby/' + room, { d: { k: key, at: Date.now() } }, { retain: true }); // маяк для входа по коду
+      // «Новая комната»: в старые топики (retained) — «переехали сюда». Телефоны со старым QR
+      // и уже открытые переходят сами. Повторяем первые 2 минуты: will старого соединения
+      // мог затереть retained уже после нашей первой публикации.
+      if (movedFrom && movedFrom.key && Date.now() - t0 < MOVED_REPEAT_MS) {
+        const mv = { online: false, moved: room, k: key, at: Date.now() };
+        l.publish(TOPIC + movedFrom.key + '/host', { d: mv }, { qos: 1, retain: true });
+        if (movedFrom.room) l.publish(TOPIC + 'lobby/' + movedFrom.room, { d: mv }, { retain: true });
+      }
     }
     function report() {
       if (closed) return;
@@ -313,13 +373,14 @@
       send(clientId, msg) { const w = wrap(msg); links.forEach((l) => l.publish(base + 'to/' + clientId, w, { qos: 1 })); },
       close(silent) {
         closed = true; clearInterval(beat);
-        links.forEach((l) => { if (!silent) l.publish(base + 'host', { d: { online: false } }, { qos: 1, retain: true }); setTimeout(() => l.close(), 150); });
+        // bye — пульт ушёл сам (в отличие от will одного брокера, которому телефоны не верят сразу)
+        links.forEach((l) => { if (!silent) l.publish(base + 'host', { d: { online: false, bye: true } }, { qos: 1, retain: true, urgent: true }); setTimeout(() => l.close(), 150); });
       },
     };
   }
 
   /** Телефон/экран поверх набора линков: подписан на ВСЕХ доступных серверах сразу. */
-  function pubsubClient(defs, makeLink, { room, key, clientId, onMessage = noop, onStatus = noop, onKey = noop }) {
+  function pubsubClient(defs, makeLink, { room, key, clientId, onMessage = noop, onStatus = noop, onKey = noop, onMoved = noop }) {
     let k = key || '';
     const fromUrl = !!key;
     const cw = 'c' + rnd(5);
@@ -330,17 +391,36 @@
     const topics = () => (k ? [base() + 'down', base() + 'to/' + clientId, base() + 'host'] : [TOPIC + 'lobby/' + room]);
     const links = defs.map((def) => makeLink(def, { onMessage: recv, onState: report }));
 
+    /** Пульт сменил комнату («новая комната»): переезжаем вслед за ним. */
+    function moveTo(newRoom, newKey) {
+      const r = String(newRoom || '').toUpperCase();
+      const nk = String(newKey || '');
+      if (!/^[A-Z0-9]{3,6}$/.test(r) || !/^[A-Za-z0-9]{6,64}$/.test(nk) || nk === k) return;
+      room = r; k = nk;
+      if (hostAlive) { hostAlive = false; report(); } // новый пульт ответит — снова «online» (и hello)
+      waitFrom = Date.now();
+      try { onMoved(room, k); } catch (e) { /* ignore */ }
+      onKey(k);
+      links.forEach((x) => x.setTopics(topics()));
+      setTimeout(probe, 300);
+    }
     function recv(l, topic, m) {
       const d = m && m.d;
       if (!d) return;
       if (topic === TOPIC + 'lobby/' + room) {
-        if (d.k && d.k !== k) { k = String(d.k); onKey(k); links.forEach((x) => x.setTopics(topics())); setTimeout(probe, 300); }
+        if (d.moved) moveTo(d.moved, d.k);
+        else if (d.k && d.k !== k) { k = String(d.k); onKey(k); links.forEach((x) => x.setTopics(topics())); setTimeout(probe, 300); }
         return;
       }
       if (!k || topic.indexOf(base()) !== 0) return;
       if (topic === base() + 'host') {
-        // retained-флаг может быть устаревшим: «найден» — только после настоящего ответа пульта
-        if (d.online === false) { if (hostAlive) { hostAlive = false; waitFrom = Date.now(); report(); } } else probe();
+        if (d.moved && d.k) { moveTo(d.moved, d.k); return; }
+        // retained-флаг может быть устаревшим: «найден» — только после настоящего ответа пульта.
+        // online:false без bye — это will одного брокера (у пульта моргнула связь с ним);
+        // если пульт недавно отвечал (по любому брокеру) — не верим, иначе телефоны зря «теряют ведущего»
+        if (d.online === false) {
+          if (hostAlive && (d.bye || Date.now() - lastHeard > HOST_FRESH_MS)) { hostAlive = false; waitFrom = Date.now(); report(); }
+        } else probe();
         return;
       }
       if (dd.seen(m.i)) return;
@@ -351,11 +431,13 @@
     function send(msg) {
       if (!k) return false;
       const w = wrap(msg);
+      const o = { qos: 1, urgent: !!(msg && msg.t === 'leave') };
       let ok = false;
-      links.forEach((l) => { if (l.publish(base() + 'up/' + clientId, w, { qos: 1 })) ok = true; });
+      links.forEach((l) => { if (l.publish(base() + 'up/' + clientId, w, o)) ok = true; });
       return ok;
     }
-    function probe() { if (!closed) send({ t: 'ping' }); }
+    // ts — пульт вернёт его в pong вместе со своим временем (телефон оценит разницу часов)
+    function probe() { if (!closed) send({ t: 'ping', ts: Date.now() }); }
     function info() {
       const ok = links.filter((l) => l.state === 'ok');
       return {
@@ -366,10 +448,16 @@
         text: ok.length ? 'серверы: ' + ok.map((l) => l.name).join(', ') + (hostAlive ? ' · пульт отвечает через ' + via : ' · пульт молчит') : 'нет ни одного сервера связи',
       };
     }
+    // onStatus — только при СМЕНЕ статуса: раньше он звался на каждое моргание любого брокера,
+    // а телефон/экран на каждый вызов слали hello, и пульт заново рассылал им аватары (шторм)
+    let lastSt = '';
     function report() {
       if (closed) return;
       const server = links.some((l) => l.state === 'ok');
-      onStatus(!server ? 'connecting' : hostAlive ? 'online' : 'no-host', info());
+      const st = !server ? 'connecting' : hostAlive ? 'online' : 'no-host';
+      if (st === lastSt) return;
+      lastSt = st;
+      onStatus(st, info());
     }
     links.forEach((l) => { l.topics = topics(); l.onconnect = () => setTimeout(probe, 200); l.open(); });
 
@@ -386,7 +474,14 @@
     return {
       send,
       info,
-      reconnect() { if (closed) return; waitFrom = Date.now(); links.forEach((l) => { if (l.state !== 'ok') l.open(); }); setTimeout(probe, 500); },
+      // вернулись на вкладку: пульт молчит дольше WAKE_QUIET_MS — соединения могли умереть во сне, открываем заново
+      reconnect() {
+        if (closed) return;
+        const quiet = !lastHeard || Date.now() - lastHeard > WAKE_QUIET_MS;
+        if (!hostAlive) waitFrom = Date.now();
+        links.forEach((l) => { if (l.state !== 'ok' || quiet) l.open(); });
+        probe(); setTimeout(probe, 500);
+      },
       reconnectAll() { if (closed) return; waitFrom = Date.now(); links.forEach((l) => l.open()); },
       close() { closed = true; clearInterval(tick); links.forEach((l) => l.close()); },
     };

@@ -299,11 +299,29 @@
           </div>`);
         const img = $('img', el), readout = $('.readout', el);
         const z = Object.assign({ x: 0.5, y: 0.5, scale: 5 }, m.zoom || {});
+        // Точка фокуса — в долях КАРТИНКИ (у zoom это media.zoom — глаза; у blur — media.focus или
+        // «лицо» по умолчанию: портреты 3:4, лицо в верхней трети). Окно 16:10 режет картинку,
+        // поэтому кадрируем не по центру, а так, чтобы фокус стоял чуть выше середины кадра.
+        const focus = q.type === 'zoom' ? { x: Number(z.x), y: Number(z.y) } : Object.assign({ x: 0.5, y: 0.33 }, m.focus || {});
+        let geo = null;
+        function layout() {
+          const W = el.clientWidth, H = el.clientHeight, nw = img.naturalWidth, nh = img.naturalHeight;
+          if (!W || !H || !nw || !nh) return null;
+          if (geo && geo.W === W && geo.H === H) return geo;
+          const c = Math.max(W / nw, H / nh), dw = nw * c, dh = nh * c;
+          const ox = Math.min(0, Math.max(W - dw, W * 0.5 - focus.x * dw));
+          const oy = Math.min(0, Math.max(H - dh, H * 0.44 - focus.y * dh));
+          img.style.objectPosition = `${ox.toFixed(1)}px ${oy.toFixed(1)}px`;
+          geo = { W, H, px: ox + focus.x * dw, py: oy + focus.y * dh };
+          return geo;
+        }
         return {
           el,
           /** p — прогресс таймера 0..1, done — ответ показан. */
           progress(p, done) {
+            const g = layout();
             if (done) {
+              if (!img.dataset.failed) img.style.visibility = '';
               if (!el.classList.contains('done')) {
                 el.classList.add('done');
                 img.style.transform = 'none';
@@ -314,10 +332,11 @@
             }
             el.classList.remove('done');
             if (q.type === 'zoom') {
-              const W = el.clientWidth, H = el.clientHeight;
+              if (!g) { img.style.visibility = 'hidden'; return; } // до загрузки не мелькаем целым кадром
+              img.style.visibility = '';
+              const { W, H, px, py } = g;
               const S = Math.max(1, Number(z.scale) || 1);
               const sc = Math.pow(S, 1 - p); // экспонента — отдаление ощущается равномерным
-              const px = z.x * W, py = z.y * H;
               // точка фокуса плывёт из центра кадра на своё место; кадр всегда заполнен
               let tx = (W / 2 + (px - W / 2) * p) - sc * px;
               let ty = (H / 2 + (py - H / 2) * p) - sc * py;
@@ -545,48 +564,74 @@
       update(s) {
         const bets = s.final.stage === 'bets';
         $('.hint', el).textContent = bets ? 'ставки сделаны? пишем сумму и отдаём ведущему' : 'один вопрос. всё или ничего';
-        const nsig = bets ? JSON.stringify(s.teams.map((t) => [t.id, s.final.bets[t.id] !== undefined])) : '';
+        const pass = (t) => t.score <= 0 && s.final.bets[t.id] === undefined; // счёт ≤ 0 — ставка 0, ждать нечего
+        const nsig = bets ? JSON.stringify(s.teams.map((t) => [t.id, s.final.bets[t.id] !== undefined, pass(t)])) : '';
         if (nsig !== sig) {
           sig = nsig;
           $('.bets', el).innerHTML = bets
-            ? s.teams.map((t) => { const ok = s.final.bets[t.id] !== undefined; return chip(t, ok ? '' : 'wait', ok ? ' · есть' : ' · думают…'); }).join('')
+            ? s.teams.map((t) => { const ok = s.final.bets[t.id] !== undefined; return chip(t, ok || pass(t) ? '' : 'wait', ok ? ' · есть' : pass(t) ? ' · ставка 0' : ' · думают…'); }).join('')
             : '';
         }
       },
     };
   }
 
+  /** Пьедестал с ничьими: места по очкам (1, 1, 2…), на одном месте может стоять несколько команд. */
   function WinnerView(s) {
-    const sorted = s.teams.slice().sort((a, b) => b.score - a.score);
-    const top = sorted.slice(0, 3);
-    const order = [top[1], top[0], top[2]];
-    const cols = order.map((t) => {
-      if (!t) return '';
-      const place = t === top[0] ? 1 : t === top[1] ? 2 : 3;
-      const d = place === 1 ? 1.1 : place === 2 ? 0.6 : 0.2;
+    const fmt = U.fmtScore;
+    const places = U.placesOf(s.teams);
+    const podium = places.slice(0, 3);
+    const rest = places.slice(3);
+    const champs = podium[0] ? podium[0].teams : [];
+    const tie = champs.length > 1;
+    const big = podium.some((g) => g.teams.length >= 4);
+    const col = (g) => {
+      if (!g) return '';
+      const n = g.teams.length;
+      const d = g.place === 1 ? 1.1 : g.place === 2 ? 0.6 : 0.2;
+      // ничья: блок в полоску из цветов всех команд места
+      const stripes = n > 1 ? `background:linear-gradient(90deg, ${g.teams.map((t, i) => `${t.color} ${(i * 100 / n).toFixed(2)}% ${((i + 1) * 100 / n).toFixed(2)}%`).join(', ')});` : '';
       return `
-        <div class="pcol p${place}" style="${teamVars(t)};--d:${d}s">
+        <div class="pcol p${g.place} ${n > 1 ? 'multi' : ''}" style="${teamVars(g.teams[0])};--d:${d}s;--n:${n}">
           <div class="who">
-            <div class="ava emoji-font">${place === 1 ? '<span class="crown">👑</span>' : ''}${avaInner(t)}</div>
-            <span class="tag white nm">${esc(t.name)}</span>
+            ${g.place === 1 ? '<span class="crown emoji-font">👑</span>' : ''}
+            <div class="avas">${g.teams.map((t, i) => `<div class="ava emoji-font" style="${teamVars(t)};--i:${i}">${avaInner(t)}</div>`).join('')}</div>
+            <div class="nms">${g.teams.map((t) => `<span class="tag white nm">${esc(t.name)}</span>`).join('')}</div>
           </div>
-          <div class="block">${place}<small>${t.score}</small></div>
+          <div class="block" style="${stripes}"><span class="pn">${g.place}</span>${n > 1 ? '<span class="tie tag black">ничья</span>' : ''}<small>${fmt(g.score)}</small></div>
         </div>`;
-    }).join('');
-    const rest = sorted.slice(3).map((t) => chip(t, '', ` · ${t.score}`)).join('');
-    const champ = top[0];
+    };
+    const cols = [col(podium[1]), col(podium[0]), col(podium[2])].join('');
+    const restHtml = rest.map((g) => g.teams.map((t) =>
+      `<span class="chip rest" style="${teamVars(t)}"><b class="pl">${g.place}</b><span class="e emoji-font">${avaInner(t)}</span><span class="cn">${esc(t.name)}</span><span class="cs">${fmt(t.score)}</span></span>`).join('')).join('');
+    const who = { 2: 'на двоих', 3: 'на троих', 4: 'на четверых', 5: 'на пятерых', 6: 'на шестерых', 7: 'на семерых', 8: 'на восьмерых' };
+    const kicker = !champs.length ? 'корона достаётся…' : tie ? `корона делится ${who[champs.length] || 'на всех'}` : 'корона достаётся…';
+    const title = !champs.length ? 'никому' : tie ? 'НИЧЬЯ!' : champs[0].name;
     const el = h(`
-      <div class="view full winner">
-        <span class="tag lime kicker">корона достаётся…</span>
-        <h1 class="mega lime wiggle" style="--mega:${champ ? megaSize(champ.name, 150, 1) : 150}px">${letters(champ ? champ.name : 'никому', 500)}</h1>
-        <div class="podium">${cols}</div>
-        ${rest ? `<div class="others">${rest}</div>` : ''}
+      <div class="view full winner ${rest.length ? 'has-rest' : ''} ${big ? 'crowd' : ''} ${tie ? 'tie' : ''}">
+        <span class="tag lime kicker">${esc(kicker)}</span>
+        <h1 class="mega lime wiggle" style="--mega:${megaSize(title, 150, 1)}px">${letters(title, 500)}</h1>
+        <div class="podium-row">
+          <div class="podium">${cols}</div>
+          ${restHtml ? `<div class="others">${restHtml}</div>` : ''}
+        </div>
       </div>`);
+    // много команд на одном месте — пьедестал ниже и мельче, чтобы корона не налезала на заголовок
+    function fit() {
+      const mega = $('.mega', el), row = $('.podium-row', el);
+      const clash = () => row.offsetTop - 78 < mega.offsetTop + mega.offsetHeight; // корона торчит над аватарами на ~90 px
+      el.classList.remove('crowd2');
+      if (!big) el.classList.remove('crowd');
+      if (clash()) el.classList.add('crowd');
+      if (clash()) el.classList.add('crowd2');
+    }
     return {
       type: 'winner', el,
       mounted() {
+        fit();
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (el.isConnected) fit(); });
         window.Sfx.play('fanfare');
-        const colors = champ ? [champ.color, '#FFFFFF', '#C6FF00', '#FF2E93', '#2B4BFF', '#FF6A00'] : undefined;
+        const colors = champs.length ? [...champs.map((t) => t.color), '#FFFFFF', '#C6FF00', '#FF2E93', '#2B4BFF', '#FF6A00'] : undefined;
         setTimeout(() => confetti.cannons({ count: 160, colors }), 900);
         setTimeout(() => confetti.rain(6000, { colors }), 1400);
       },
@@ -718,6 +763,12 @@
     const sig = JSON.stringify(s.teams.map((t) => [t.id, t.name, t.emoji, t.color, t.key, t.avatarV || 0]));
     if (sig !== teamSig) {
       teamSig = sig;
+      // 1–4 команды — крупно в ряд, 5–6 — компактнее, 7–8 — два ряда (вопрос/табло чуть ниже)
+      const n = s.teams.length;
+      scorebar.dataset.n = n;
+      scorebar.className = (scorebar.classList.contains('hidden') ? 'hidden ' : '') + (n >= 7 ? 'rows2' : n >= 5 ? 'compact' : '');
+      shell.classList.toggle('sb2', n >= 7);
+      for (const k in fitLen) delete fitLen[k];
       scorebar.innerHTML = s.teams.map((t) => `
         <div class="team" data-id="${t.id}" style="${teamVars(t)}">
           <span class="crown emoji-font">👑</span>
@@ -742,12 +793,22 @@
     if (view) scorebar.classList.toggle('hidden', view.type === 'splash' || view.type === 'winner' || !s.teams.length);
   }
 
+  const fitLen = {}; // teamId → длина строки, под которую подобран кегль
   function setScoreText(id, v) {
     const el = scorebar.querySelector(`[data-id="${id}"] .sc`);
     if (!el) return;
-    el.textContent = Math.round(v);
-    el.classList.toggle('neg', v < 0);
+    const txt = U.fmtScore(v);
+    el.textContent = txt;
+    el.classList.toggle('neg', Math.round(v) < 0);
+    // счёт всегда целиком: если не влезает (−9999, 12000 при 8 командах) — уменьшаем кегль
+    if (fitLen[id] !== txt.length) {
+      fitLen[id] = txt.length;
+      el.style.fontSize = '';
+      const cw = el.clientWidth, sw = el.scrollWidth;
+      if (cw && sw > cw) el.style.fontSize = Math.floor(parseFloat(getComputedStyle(el).fontSize) * cw / sw) + 'px';
+    }
   }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { for (const k in fitLen) delete fitLen[k]; Object.keys(shown).forEach((id) => setScoreText(id, shown[id])); });
 
   /** Анимированный count-up от текущего отображаемого значения. */
   function countTo(id, target) {
@@ -928,7 +989,21 @@
     if (now - musicSyncAt > 1000) { musicSyncAt = now; syncMusicFiles(s); }
   }
 
-  function frame() {
+  /* Сторож fps: если экран тянет < 30 кадров (4K без GPU), включаем облегчённый режим. */
+  let fpsT0 = 0, fpsN = 0, lowStrikes = 0;
+  function fpsWatch(now) {
+    if (document.hidden || busy || document.documentElement.classList.contains('lowfx')) { fpsT0 = 0; return; }
+    if (!fpsT0) { fpsT0 = now; fpsN = 0; return; }
+    fpsN++;
+    if (now - fpsT0 < 3000) return;
+    const fps = (fpsN * 1000) / (now - fpsT0);
+    lowStrikes = fps < 30 ? lowStrikes + 1 : 0;
+    if (lowStrikes >= 2) document.documentElement.classList.add('lowfx');
+    fpsT0 = now; fpsN = 0;
+  }
+
+  function frame(now) {
+    fpsWatch(now || performance.now());
     const s = Store.get();
     countdown(s);
     musicTick(s);
@@ -1011,7 +1086,13 @@
     const client = window.Net.createClient({
       room: netRoom, key: P.get('k') || '', clientId,
       onStatus(st) {
-        if (st === 'online') { client.send({ t: 'hello', role: 'screen' }); showBadge(''); }
+        if (st === 'online') {
+          // версии уже полученных аватаров: пульт перешлёт только недостающие/изменившиеся
+          const avs = {};
+          Object.keys(avatars).forEach((id) => { avs[id] = avatars[id].v; });
+          client.send({ t: 'hello', role: 'screen', avs });
+          showBadge('');
+        }
         else showBadge(st === 'no-host' ? 'пульт не отвечает — проверь, что он открыт' : st === 'unavailable' ? 'связь недоступна' : 'ищем сервер связи…');
       },
       onMessage(m) {
@@ -1027,15 +1108,41 @@
       },
     });
     // клавиатурный баззер этого экрана — пульту по сети
-    Store.useRemote((a) => { if (a && a.type === 'buzz') client.send({ t: 'kbBuzz', teamId: a.teamId }); });
+    // qid — ключ открытого вопроса: пульт отсечёт запоздавшее нажатие, если вопрос уже сменился
+    Store.useRemote((a) => {
+      if (!a || a.type !== 'buzz') return;
+      const st = Store.get();
+      client.send({ t: 'kbBuzz', teamId: a.teamId, qid: st.phase === 'question' && st.current ? st.current.key : null });
+    });
     Store.subscribe((s) => { processEvents(s); render(); musicSettings(s); });
     window.addEventListener('pagehide', () => client.send({ t: 'leave' }));
   }
 
   /* ---------- старт ---------- */
+  /** Все картинки вопросов — в кэш заранее (первое открытие без задержки), по 4 параллельно. */
+  const preloaded = [];
+  function preloadImages(q) {
+    const list = [];
+    const add = (m) => { if (!m) return; (m.images || []).forEach((x) => list.push(x)); if (m.fused) list.push(m.fused); };
+    (q.rounds || []).forEach((R) => R.categories.forEach((c) => c.questions.forEach((x) => add(x.media))));
+    if (q.final) add(q.final.media);
+    const queue = Array.from(new Set(list.filter(Boolean)));
+    const next = () => {
+      const src = queue.shift();
+      if (!src) return;
+      const im = new Image();
+      im.decoding = 'async';
+      im.onload = im.onerror = () => { (im.decode ? im.decode().catch(() => {}) : Promise.resolve()).then(next); };
+      im.src = src;
+      preloaded.push(im);
+    };
+    for (let i = 0; i < 4; i++) next();
+  }
+
   window.loadQuiz().then(({ quiz: q }) => {
     quiz = q;
     window.Store.setQuiz(q);
+    setTimeout(() => preloadImages(q), 300);
     if (netMode) startNet(); else startLocal();
     requestAnimationFrame(frame);
   });

@@ -18,8 +18,9 @@
 
   /* ---------- комната и память телефона ---------- */
   const params = new URLSearchParams(location.search);
-  const room = (params.get('room') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
-  const KEY = 'svoyak:buzzer:' + room + (params.get('dev') ? ':' + params.get('dev').slice(0, 12) : '');
+  let room = (params.get('room') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+  const keyFor = (r) => 'svoyak:buzzer:' + r + (params.get('dev') ? ':' + params.get('dev').slice(0, 12) : '');
+  let KEY = keyFor(room);
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
   // постоянный id телефона: по нему пульт узнаёт «свою» команду после перезагрузки/обрыва.
@@ -40,11 +41,13 @@
   let netStatus = 'connecting';
   let pickedEmoji = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
   let flash = null;            // { kind, until } — короткие локальные надписи
-  let pressedQid = null;       // на какой вопрос этот телефон уже нажал
+  let pressedQid = null;       // на какой вопрос этот телефон уже нажал (ждём ответа пульта)
+  let triedQid = null;         // на какой вопрос жали вообще (для «НЕ УСПЕЛИ», даже если ответ пульта запоздал)
   let wonQid = null;           // чтобы праздновать один раз
   let joining = false;
   let pendingAvatar = null;    // аватар для новой команды (dataURL) или null = эмодзи
   let myAvatar = null;         // свой аватар, присланный пультом
+  let myAvatarK = null;        // его «версия:команда» — в hello, чтобы пульт не слал ту же картинку заново
   let notice = '';             // сообщение на экране входа
   const ERR_TEXT = {
     name: 'Впиши название команды.',
@@ -72,6 +75,11 @@
   let joiningAt = 0;
   let joinedRev = -1;
   let lastHello = 0;
+  let createdAt = pendingCreate ? Date.now() : 0; // когда отправили заявку (для предупреждения «пульт не получил»)
+  const BUZZ_WAIT_MS = 2000;   // нет ответа пульта на нажатие столько — кнопка снова активна
+  let buzzWait = 0;            // таймер ожидания ответа на нажатие
+  let skew = null;             // оценка «часы пульта − часы телефона», мс (по pong)
+  let skewRtt = Infinity, skewAt = 0;
   const dbg = [];               // последние сообщения (для отладки: window.__buzzer)
   window.__buzzer = { dbg, get state() { return state; }, get myTeam() { return myTeam; }, get net() { return netStatus; } };
 
@@ -93,22 +101,29 @@
     client = window.Net.createClient({
     room, clientId, key: roomKey, broker: brokerHint,
     onKey(k) { roomKey = k; try { localStorage.setItem('svoyak:k:' + room, k); } catch (e) { /* ignore */ } },
-    onStatus(st, info) {
+    // ведущий нажал «новая комната» — сеть уже переехала, обновляем код и адрес (QR со старым кодом тоже приведёт сюда)
+    onMoved(r, k) {
+      room = r; KEY = keyFor(room); save();
+      $('room-code').textContent = room;
+      try { const u = new URL(location.href); u.searchParams.set('room', room); u.searchParams.set('k', k); history.replaceState(null, '', u.toString()); } catch (e) { /* ignore */ }
+    },
+    onStatus(st, info) { // зовётся только при смене статуса
       netStatus = st;
       netInfo = info || null;
       if (st === 'online') {
-        client.send({ t: 'hello', teamId: myTeam });
+        client.send({ t: 'hello', teamId: myTeam, avk: myAvatarK || undefined });
         if (pendingCreate && !myTeam) sendCreate();
       }
       render();
     },
     onMessage(m) {
-      if (m.t !== 'pong' && dbg.length < 200) dbg.push([Date.now() % 100000, m.t, m.rev, m.teamId || '']);
+      if (m.t === 'pong') { onPong(m); return; }
+      if (dbg.length < 200) dbg.push([Date.now() % 100000, m.t, m.rev, m.teamId || '']);
       if (m.t === 'state') {
         if (state && typeof m.rev === 'number' && typeof state.rev === 'number' && m.rev < state.rev) return; // устаревший снимок
         if (!state || state.qid !== m.qid) $('big').classList.remove('down');
         // баззер снова открыт (кто-то ошибся или ведущий сбросил) — можно жать ещё раз
-        if (state && state.winner && !m.winner) { pressedQid = null; $('big').classList.remove('down'); }
+        if (state && state.winner && !m.winner) { pressedQid = null; triedQid = null; $('big').classList.remove('down'); }
         state = m;
         // команду удалили на пульте (только если снимок новее, чем наш «joined»)
         if (myTeam && !m.teams.some((t) => t.id === myTeam) && (typeof m.rev !== 'number' || m.rev > joinedRev)) { myTeam = null; save(); }
@@ -123,8 +138,7 @@
           optimistic = null; pendingCreate = null;
           // нажали до подтверждения — отправляем, только если вопрос всё ещё открыт
           if (queuedBuzz && state && state.armed && state.qid === queuedBuzz.qid && !(state.wrong || []).includes(myTeam)) {
-            pressedQid = state.qid;
-            client.send({ t: 'buzz', teamId: myTeam, clientTs: queuedBuzz.at });
+            sendBuzz(state.qid, queuedBuzz.at, false); // нажатие до подтверждения — без отсева по возрасту
           } else $('big').classList.remove('down');
           queuedBuzz = null;
         } else if (optimistic) {
@@ -134,7 +148,7 @@
           myTeam = null; myAvatar = null; save();
         }
       } else if (m.t === 'myAvatar') {
-        if (m.teamId === myTeam || !myTeam) myAvatar = m.data || null;
+        if (m.teamId === myTeam || !myTeam) { myAvatar = m.data || null; myAvatarK = (m.data ? (m.v || 1) : 0) + ':' + m.teamId; }
         avatarSig = '';
       } else if (m.t === 'err') {
         joining = false;
@@ -143,10 +157,14 @@
           optimistic = null; pendingCreate = null; queuedBuzz = null; save(); // назад на форму
         }
       } else if (m.t === 'buzzResult') {
+        // ответ на нажатие по прошлому вопросу (пришёл поздно) — не трогаем текущую кнопку
+        if (m.qid != null && state && m.qid !== state.qid) { render(); return; }
+        clearTimeout(buzzWait);
         if (m.result === 'won') { if (state && wonQid !== state.qid) celebrate(state.qid); }
         else if (m.result === 'early') setFlash('early', 1300);
         else if (m.result === 'test') { setFlash('test', 1500); vibrate(60); window.Sfx.play('pop'); }
         else if (m.result === 'late') { vibrate([40, 40, 40]); }
+        else if (m.result === 'stale') { if (pressedQid === m.qid || m.qid == null) pressedQid = null; } // нажатие застряло в сети — можно жать снова
         $('big').classList.remove('down');
       }
       render();
@@ -162,6 +180,37 @@
   }
   function setFlash(kind, ms) { flash = { kind, until: Date.now() + ms }; }
 
+  /** Разница часов с пультом: берём замер с самым коротким путём туда-обратно (свежие важнее). */
+  function onPong(m) {
+    if (typeof m.now !== 'number' || typeof m.ts !== 'number') return;
+    const rtt = Date.now() - m.ts;
+    if (rtt < 0 || rtt > 3000) return;
+    // старый замер забываем через 30 с: часы телефона могли подвести
+    if (rtt <= skewRtt || Date.now() - skewAt > 30000) { skew = m.now - (m.ts + rtt / 2); skewRtt = rtt; skewAt = Date.now(); }
+  }
+
+  /** Отправить нажатие. Нет ответа пульта BUZZ_WAIT_MS — кнопка снова активна (пульт сам отсечёт дубль). */
+  function sendBuzz(qid, at, withAge) {
+    const btn = $('big');
+    pressedQid = qid; triedQid = qid;
+    btn.classList.add('down');
+    const msg = { t: 'buzz', teamId: myTeam, qid, clientTs: at };
+    if (withAge && skew != null) msg.hostTs = Math.round(at + skew); // пульт не засчитает нажатие, застрявшее в сети
+    client.send(msg);
+    clearTimeout(buzzWait);
+    buzzWait = setTimeout(() => {
+      if (pressedQid === qid && btn.classList.contains('down')) { pressedQid = null; btn.classList.remove('down'); render(); }
+    }, BUZZ_WAIT_MS);
+  }
+  let shakeT = 0;
+  function shake() {
+    const btn = $('big');
+    btn.classList.remove('shake'); void btn.offsetWidth; btn.classList.add('shake');
+    clearTimeout(shakeT);
+    shakeT = setTimeout(() => btn.classList.remove('shake'), 600); // иначе shake перебивал pulse/won до конца игры
+  }
+  $('big').addEventListener('animationend', (e) => { if (e.animationName === 'shake') $('big').classList.remove('shake'); });
+
   /* ---------- нажатие ---------- */
   function press(e) {
     if (e) e.preventDefault();
@@ -174,22 +223,22 @@
       if (state && state.phase === 'question' && state.stage === 'question') return;
       setFlash('early', 1300); vibrate(120); render(); return;
     }
-    if (!state || netStatus !== 'online' || !myTeam) { btn.classList.remove('shake'); void btn.offsetWidth; btn.classList.add('shake'); return; }
+    // сервер связи есть, а пульт «моргнул» (no-host) — всё равно шлём: пульт, скорее всего, жив
+    const linked = netStatus === 'online' || netStatus === 'no-host';
+    if (!state || !linked || !myTeam) { shake(); return; }
     const s = state;
-    if (s.phase === 'setup') { client.send({ t: 'buzz', teamId: myTeam, clientTs: Date.now() }); return; }
+    if (s.phase === 'setup') { client.send({ t: 'buzz', teamId: myTeam, qid: null, clientTs: Date.now() }); return; }
     const open = s.phase === 'question' && s.stage === 'question';
     if (s.armed && !s.wrong.includes(myTeam)) {
-      if (pressedQid === s.qid) return; // уже нажали, ждём ответа пульта
-      pressedQid = s.qid;
-      btn.classList.add('down');
+      if (pressedQid === s.qid && btn.classList.contains('down')) return; // уже нажали, ждём ответа пульта
       vibrate(30);
-      client.send({ t: 'buzz', teamId: myTeam, clientTs: Date.now() });
+      sendBuzz(s.qid, Date.now(), true);
       return;
     }
     if (!open || (!s.winner && !s.wrong.includes(myTeam))) {
       setFlash('early', 1300); vibrate(120);
     }
-    btn.classList.remove('shake'); void btn.offsetWidth; btn.classList.add('shake');
+    shake();
     render();
   }
   $('big').addEventListener('pointerdown', press);
@@ -226,9 +275,10 @@
   let avatarSig = '';
   function renderMenu() {
     const t = state && myTeam && state.teams.find((x) => x.id === myTeam);
-    if (!t) return;
-    $('menu-preview').style.setProperty('--tc', t.color);
-    $('menu-preview').innerHTML = avHtml(t.av ? myAvatar : null, t.emoji);
+    // пока синхронизируемся — показываем то, что выбрали при создании (а не пустой квадрат)
+    if (!t && !optimistic) return;
+    $('menu-preview').style.setProperty('--tc', t ? t.color : '#C6FF00');
+    $('menu-preview').innerHTML = t ? avHtml(t.av ? myAvatar : null, t.emoji) : avHtml(optimistic.avatar, optimistic.emoji);
   }
   $('me-chip').addEventListener('click', () => { $('menu').hidden = false; renderMenu(); });
   $('menu').addEventListener('click', (e) => {
@@ -247,6 +297,7 @@
     // подтверждения ведущего не ждём: сразу показываем свою кнопку, заявка уходит в фоне
     pendingCreate = { t: 'create', name, emoji: pickedEmoji, avatar: pendingAvatar };
     optimistic = { name, emoji: pickedEmoji, avatar: pendingAvatar };
+    createdAt = Date.now();
     notice = '';
     save();
     keepAwake();
@@ -272,6 +323,8 @@
   /* ---------- отрисовка ---------- */
   const NET_TEXT = { connecting: 'ищем сервер связи…', online: 'на связи', offline: 'нет сети', 'no-host': 'ведущий не найден', unavailable: 'библиотека связи не загрузилась' };
   let diagSig = '';
+  const HOST_HINT = $('host-hint').textContent;
+  let hintOpened = false, roomFormHint = false;
   function renderDiag() {
     const inf = (client && client.info) ? client.info() : (netInfo || {});
     const server = netStatus === 'online' || netStatus === 'no-host';
@@ -284,6 +337,15 @@
     $('diag').classList.toggle('ok', hostOk);
     const longNoHost = !hostOk && noHostSince && Date.now() - noHostSince > 20000;
     $('host-hint').hidden = !longNoHost;
+    // пульта нет 30+ с при живом сервере связи — может, ведущий сменил комнату: подсказываем пересканировать QR
+    const veryLong = longNoHost && server && Date.now() - noHostSince > 30000;
+    const hint = veryLong
+      ? 'Пульт не отвечает уже ' + Math.round((Date.now() - noHostSince) / 1000) + ' с. Если ведущий сменил комнату — отсканируй QR на экране гостей заново' + ($('join').hidden ? '.' : ' или введи код комнаты выше.') + ' Команда и баллы не пропадут.'
+      : HOST_HINT;
+    if ($('host-hint').textContent !== hint) $('host-hint').textContent = hint;
+    if (veryLong && !hintOpened) { hintOpened = true; $('netbox').open = true; }
+    if (hostOk) hintOpened = false;
+    roomFormHint = veryLong;
     const sum = $('netbox').querySelector('summary');
     const want = hostOk ? 'ⓘ связь' : longNoHost ? 'ⓘ связь — пульт не отвечает' : 'ⓘ связь — подключаемся';
     if (sum.textContent !== want) sum.textContent = want;
@@ -311,7 +373,7 @@
     // на экране входа периодически «здороваемся»: пульт вернёт нашу команду, если она есть
     if (!myTeam && netStatus === 'online' && client && Date.now() - lastHello > 6000) { lastHello = Date.now(); client.send({ t: 'hello' }); }
     renderDiag();
-    $('no-room').hidden = !!room;
+    $('no-room').hidden = !!room && !roomFormHint;
 
     let team = state && myTeam && state.teams.find((t) => t.id === myTeam);
     if (!team && optimistic) {
@@ -362,7 +424,14 @@
     const tName = (id) => { const t = s.teams.find((x) => x.id === id); return t ? t.name : '…'; };
     let lbl = 'ЖДЁМ', sub = '', cls = 'idle', status = '';
     const q = s.phase === 'question';
-    if (!state) { lbl = 'ГОТОВО'; sub = 'команда создана — ждём начала игры'; cls = ''; status = 'вы в игре'; }
+    // заявка на команду без ответа пульта 12+ с — честно говорим, что ведущий её не получил (N9)
+    const unconfirmed = team.optimistic && createdAt && Date.now() - createdAt > 12000;
+    if (unconfirmed) {
+      lbl = 'ЖДЁМ ПУЛЬТ'; cls = 'idle';
+      sub = netStatus === 'online' ? 'ведущий пока не подтвердил команду' : 'пульт не отвечает — команда ещё не создана';
+      status = 'проверь связь внизу ↓';
+    }
+    else if (!state) { lbl = 'ГОТОВО'; sub = team.optimistic ? 'отправили команду ведущему…' : 'команда создана — ждём начала игры'; cls = ''; status = 'вы в игре'; }
     else if (flash && flash.kind === 'early') { lbl = 'РАНО!'; sub = 'вопрос ещё не открыт'; cls = 'blocked'; }
     else if (flash && flash.kind === 'test') { lbl = 'НА СВЯЗИ'; sub = 'кнопка работает ✓'; cls = ''; }
     else if (s.phase === 'setup') { lbl = 'ТЕСТ'; sub = 'жми — проверим связь'; cls = ''; status = 'игра скоро начнётся'; }
@@ -374,7 +443,7 @@
     else if (q && s.stage === 'question') {
       if (s.winner === myTeam) { lbl = 'ПЕРВЫЕ!'; sub = 'отвечайте!'; cls = 'won'; status = 'ваш ответ'; }
       else if (s.wrong.includes(myTeam)) { lbl = 'МИМО'; sub = 'вы уже ошиблись на этом вопросе'; cls = 'blocked'; status = 'ждём других'; }
-      else if (s.winner) { lbl = pressedQid === s.qid ? 'НЕ УСПЕЛИ' : 'СТОП'; sub = 'отвечает ' + tName(s.winner); cls = 'blocked'; }
+      else if (s.winner) { lbl = pressedQid === s.qid || triedQid === s.qid ? 'НЕ УСПЕЛИ' : 'СТОП'; sub = 'отвечает ' + tName(s.winner); cls = 'blocked'; }
       else if (pressedQid === s.qid && btn.classList.contains('down')) { lbl = '…'; sub = 'ловим'; cls = ''; }
       else { lbl = 'ЖМИ!'; sub = 'если знаешь'; cls = 'armed'; status = 'вопрос открыт'; }
     }
@@ -383,8 +452,13 @@
     else if (s.phase === 'board') { lbl = 'ЖДЁМ ВОПРОС'; sub = 'выбирают ячейку'; }
     else if (s.phase === 'final') { lbl = 'ФИНАЛ'; sub = 'пишите ответ на бумажке'; }
     else if (s.phase === 'winner') {
-      const place = s.teams.slice().sort((a, b) => b.score - a.score).findIndex((t) => t.id === myTeam) + 1;
-      lbl = place === 1 ? 'ПОБЕДА!' : `#${place}`; sub = place === 1 ? 'корона ваша' : 'gg, было мощно';
+      // место = 1 + сколько команд набрали строго больше (при равенстве — общее место)
+      const me = s.teams.find((t) => t.id === myTeam);
+      const place = me ? 1 + s.teams.filter((t) => t.score > me.score).length : s.teams.length;
+      const tie = me && s.teams.some((t) => t.id !== me.id && t.score === me.score);
+      lbl = place === 1 ? (tie ? 'НИЧЬЯ!' : 'ПОБЕДА!') : `#${place}`;
+      sub = place === 1 ? (tie ? 'делите корону' : 'корона ваша') : 'gg, было мощно';
+      cls = place === 1 ? 'won' : 'idle';
     }
     if (!status) status = `${s.teams.length} ${s.teams.length === 1 ? 'команда' : 'команд'} в игре`;
 

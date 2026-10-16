@@ -18,8 +18,9 @@
   const LOCK_BEAT_MS = 2000;     // вкладка-владелец обновляет замок
   const LOCK_TTL_MS = 5000;      // замок без обновлений дольше — считается брошенным
   const ID_RETRIES = 8;          // сколько раз ждём освобождения peer id перед сменой комнаты
+  const BUZZ_MAX_AGE_MS = 5000;  // нажатие, застрявшее в сети дольше (по часам пульта), не засчитываем
 
-  let host = null, room = null, status = 'off', statusInfo = '', best = -1;
+  let host = null, room = null, roomKey = null, status = 'off', statusInfo = '', best = -1;
   let diag = {}, lastIn = null;  // диагностика для пульта
   let idTaken = 0;
   let lastSent = '';
@@ -147,13 +148,30 @@
       host.send(cid, { t: 'avatar', teamId: t.id, v, data: t.avatar || null });
     });
   }
+  /** Нажатие относится к открытому сейчас вопросу? (qid есть только у новых телефонов/экранов) */
+  function buzzLive(s, qid) {
+    if (s.phase === 'setup') return qid == null;
+    const cur = s.current;
+    return s.phase === 'question' && !!cur && cur.key === qid && cur.stage === 'question';
+  }
   function onScreen(cid, msg) {
     let sc = screens.get(cid);
     if (!sc) { sc = { lastSeen: Date.now(), avatars: new Map() }; screens.set(cid, sc); listeners.forEach((fn) => fn()); }
     sc.lastSeen = Date.now();
-    if (msg.t === 'hello') { const f = fullState(S.get()); host.send(cid, f); pushScreenAvatars(cid, sc, true); }
-    else if (msg.t === 'kbBuzz') { S.dispatch({ type: 'buzz', teamId: msg.teamId }); }   // клавиатурный баззер удалённого экрана
-    else if (msg.t === 'ping') host.send(cid, { t: 'pong', now: Date.now() });
+    if (msg.t === 'hello') {
+      host.send(cid, fullState(S.get()));
+      // экран может сказать, какие аватары у него уже есть ({teamId: версия}) — шлём только недостающие
+      if (msg.avs && typeof msg.avs === 'object') {
+        sc.avatars = new Map(Object.keys(msg.avs).map((id) => [id, Number(msg.avs[id]) || 0]));
+        pushScreenAvatars(cid, sc, false);
+      } else pushScreenAvatars(cid, sc, true);
+    }
+    else if (msg.t === 'kbBuzz') { // клавиатурный баззер удалённого экрана
+      // qid — ключ вопроса на экране в момент нажатия; без qid — старый экран, принимаем как раньше
+      if ('qid' in msg && !buzzLive(S.get(), msg.qid)) return;
+      S.dispatch({ type: 'buzz', teamId: msg.teamId });
+    }
+    else if (msg.t === 'ping') host.send(cid, { t: 'pong', now: Date.now(), ts: msg.ts });
     else if (msg.t === 'leave') { screens.delete(cid); listeners.forEach((fn) => fn()); }
   }
 
@@ -170,7 +188,8 @@
       case 'hello': { // телефон (пере)подключился — возвращаем его в свою команду
         reply(clientId, compact(S.get()));
         joined(clientId, boundTeam(clientId));
-        sentAvatar.delete(clientId);
+        // avk — какой аватар у телефона уже есть («версия:команда»): не гоняем 50 КБ зря
+        if (typeof msg.avk === 'string') sentAvatar.set(clientId, msg.avk); else sentAvatar.delete(clientId);
         pushAvatars(false);
         publishNet();
         break;
@@ -214,6 +233,14 @@
         const t = boundTeam(clientId);
         if (!t) { reply(clientId, { t: 'err', code: 'not-bound' }); joined(clientId, null); return; }
         if (msg.teamId && msg.teamId !== t.id) { reply(clientId, { t: 'err', code: 'not-yours' }); joined(clientId, t); return; }
+        // устаревшее нажатие: вопрос уже другой/закрыт или оно застряло в сети (QoS1 дослал после обрыва).
+        // qid/hostTs шлют только новые телефоны; без них — как раньше
+        const s0 = S.get();
+        const age = typeof msg.hostTs === 'number' ? Date.now() - msg.hostTs : 0;
+        if (('qid' in msg && !buzzLive(s0, msg.qid)) || age > BUZZ_MAX_AGE_MS) {
+          reply(clientId, { t: 'buzzResult', result: 'stale', teamId: t.id, qid: msg.qid, winner: s0.phase === 'question' ? s0.buzzer.winner : null, clientTs: msg.clientTs });
+          return;
+        }
         // то же действие, что и у клавиатурного баззера: первый пришедший на пульт выигрывает
         S.dispatch({ type: 'buzz', teamId: t.id });
         const s = S.get();
@@ -223,7 +250,7 @@
         else if (s.phase === 'question' && s.buzzer.winner === t.id) result = 'won';
         else if (cur && s.phase === 'question' && cur.wrong.includes(t.id)) result = 'wrong';
         else if (s.phase === 'question' && s.buzzer.winner) result = 'late';
-        reply(clientId, { t: 'buzzResult', result, teamId: t.id, winner: s.buzzer.winner, clientTs: msg.clientTs });
+        reply(clientId, { t: 'buzzResult', result, teamId: t.id, qid: msg.qid, winner: s.buzzer.winner, clientTs: msg.clientTs });
         break;
       }
       case 'leave':
@@ -231,7 +258,8 @@
         publishNet();
         break;
       case 'ping': // отвечаем сразу: не зависим от таймеров фоновой вкладки пульта
-        reply(clientId, { t: 'pong' });
+        // now/ts — телефон оценивает разницу часов с пультом (для отсева застрявших нажатий)
+        reply(clientId, { t: 'pong', now: Date.now(), ts: msg.ts });
         break;
       default: break;
     }
@@ -274,15 +302,22 @@
   }
 
   function connect() {
-    if (host) host.close();
+    // комнату сменили («новая комната» или в другой вкладке) — новый пульт скажет старым телефонам, куда переехали
+    const prev = room && roomKey ? { room, key: roomKey } : null;
+    const old = host;
+    host = null;                 // до ensureRoom: его setRoom не должен снова звать connect() из подписки
+    if (old) old.close(!!prev);
     devices.clear();
     screens.clear();
     room = ensureRoom();
+    roomKey = S.get().netKey;
+    const movedFrom = prev && (prev.room !== room || prev.key !== roomKey) ? prev : null;
     if (!window.Net) { setStatus('unavailable', 'js/net.js не загрузился'); return; }
     if (!window.Net.available()) { setStatus('unavailable', 'библиотека связи (' + window.Net.transport + ') не загрузилась'); return; }
     host = window.Net.createHost({
       room,
-      key: S.get().netKey,
+      key: roomKey,
+      movedFrom,
       onMessage,
       onLeave: (clientId) => { devices.delete(clientId); publishNet(); },
       onStatus: setStatus,
@@ -291,12 +326,15 @@
 
   function newRoom() {
     S.dispatch({ type: 'setRoom', room: U.makeRoom(4), key: U.makeKey(20) });
-    connect();
+    // при живой сети переподключит подписка на Store (комната сменилась); второй connect()
+    // создавал лишний экземпляр, и тот публиковал «пульт ушёл» уже в новую комнату
+    if (!host) connect();
   }
 
   /** Сеть держит другая вкладка пульта: отдаём ей, сами молчим. */
   function release() {
     if (host) { host.close(true); host = null; }
+    room = null; roomKey = null; // «переехали» — забота той вкладки, что забрала сеть
     devices.clear();
     status = 'other-tab'; statusInfo = 'сеть держит другая вкладка пульта';
     listeners.forEach((fn) => fn());
@@ -319,7 +357,8 @@
     setInterval(() => { if (host) { prune(); pushState(true); pushScreens(true); } }, KEEPALIVE_MS);
     S.subscribe((s) => {
       if (!host) return;
-      if (s.room && s.room !== room) connect(); // комнату сменили (например, в другой вкладке)
+      // комнату (или её секрет) сменили — «новая комната» здесь или в другой вкладке
+      if ((s.room && s.room !== room) || (s.netKey && roomKey && s.netKey !== roomKey)) connect();
       else { pushState(false); pushScreens(false); }
     });
   }

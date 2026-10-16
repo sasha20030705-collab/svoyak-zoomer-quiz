@@ -28,8 +28,10 @@ body.idle { cursor: none; }
 @keyframes rot { to { transform: rotate(360deg); } }
 @keyframes sway { 50% { transform: rotate(-6deg) translateY(-20px); } }
 
+/* зерно: чёрные крапинки с альфой — multiply тут дал бы то же самое, но на 4K без аппаратного
+   ускорения смешивание полноэкранного слоя съедало кадры. Слой чуть больше экрана (сдвиг ≤ 3%). */
 #grain {
-  position: fixed; inset: -50%; pointer-events: none; z-index: 100; opacity: .22; mix-blend-mode: multiply;
+  position: fixed; inset: -6%; pointer-events: none; z-index: 100; opacity: .22; will-change: transform;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1.6 -.45'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   animation: grain .5s steps(3) infinite;
 }
@@ -45,7 +47,8 @@ body.idle { cursor: none; }
   30%, 50%, 70% { transform: translate(-26px, 6px) rotate(-.8deg); }
   40%, 60% { transform: translate(26px, -3px) rotate(.8deg); }
 }
-.view { position: absolute; left: 0; right: 0; top: 58px; bottom: 214px; }
+.view { position: absolute; left: 0; right: 0; top: 58px; bottom: var(--vb, 214px); }
+#shell.sb2 { --vb: 280px; } /* 7–8 команд: счёт в два ряда */
 .view.full { bottom: 58px; }
 
 /* бегущие строки сверху и снизу */
@@ -219,6 +222,10 @@ body.idle { cursor: none; }
 .revealed.t-text .q-prompt { font-size: 44px; }
 .revealed.t-text .q-prompt.xlong, .revealed.t-text .q-prompt.long { font-size: 34px; }
 .q-media { flex: 1; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; }
+/* ответ к вопросу с картинкой: текст вопроса уезжает, всё место — фото и ответу */
+.question:not(.t-text) .q-prompt-wrap { display: grid; grid-template-rows: 1fr; justify-content: center; transition: grid-template-rows .55s var(--ease-pop), opacity .3s, margin .55s; }
+.revealed:not(.t-text) .q-prompt-wrap { grid-template-rows: 0fr; opacity: 0; margin-bottom: -20px; }
+.revealed:not(.t-text) .pbox { min-height: 0; overflow: hidden; }
 
 .q-answer-wrap { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .6s var(--ease-pop); flex: 0 0 auto; }
 .q-answer-wrap > div { overflow: visible; min-height: 0; }
@@ -233,7 +240,11 @@ body.idle { cursor: none; }
 .q-answer .lbl { flex: 0 0 auto; background: var(--black); color: var(--white); border-radius: 10px; padding: 14px 18px; font: 400 26px var(--font-display); transform: rotate(-5deg); }
 .q-answer .body { min-width: 0; }
 .q-answer .txt { font: 900 50px/1.08 var(--font-head); letter-spacing: -.02em; }
-.q-answer .note { font: 700 21px/1.32 var(--font-body); margin-top: 8px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.q-answer .note { font: 700 21px/1.32 var(--font-body); margin-top: 8px; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.question:not(.t-text) .q-answer { padding: 14px 30px 14px 20px; gap: 24px; }
+.question:not(.t-text) .q-answer .txt { font-size: 44px; }
+.question:not(.t-text) .q-answer .note { font-size: 19px; line-height: 1.3; margin-top: 6px; }
+.question:not(.t-text) .q-answer-wrap > div { padding-bottom: 12px; }
 .q-answer .by { margin-left: auto; flex: 0 0 auto; display: flex; gap: 12px; flex-wrap: wrap; justify-content: flex-end; max-width: 760px; }
 .shame { transform: rotate(-4deg); }
 
@@ -256,7 +267,7 @@ body.idle { cursor: none; }
 .lens { position: relative; height: 100%; aspect-ratio: 16 / 10; max-width: 100%; border-radius: 14px; overflow: hidden; background: var(--black);
   border: 6px solid var(--black); outline: 12px solid var(--white); box-shadow: 0 0 0 16px var(--black), 26px 26px 0 16px var(--black);
   transform: rotate(-.8deg); animation: card-in .7s var(--ease-pop) backwards; --r: -.8deg; margin: 20px; height: calc(100% - 40px); }
-.lens img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; transform-origin: 0 0; will-change: transform, filter; }
+.lens img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 22%; transform-origin: 0 0; will-change: transform, filter; }
 .lens.done img { transition: transform 1.2s var(--ease-pop), filter 1.2s ease; }
 .lens .corner { position: absolute; width: 70px; height: 70px; border: 8px solid var(--lime); z-index: 2; mix-blend-mode: difference; }
 .lens .corner.tl { left: 24px; top: 24px; border-right: 0; border-bottom: 0; }
@@ -310,16 +321,21 @@ body.idle { cursor: none; }
 .fuse-orig img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; display: block; }
 .fuse-orig figcaption { position: absolute; left: 50%; bottom: -30px; transform: translateX(-50%) rotate(-3deg); z-index: 2; font-size: 30px; }
 .fuse-orig.right figcaption { transform: translateX(-50%) rotate(3deg); }
-.revealed .fuse-frame { transform: translate(-50%, -50%) scale(.6) rotate(3deg); }
+.revealed .fuse-frame { transform: translate(-50%, -50%) scale(.56) rotate(3deg); }
 .revealed .fuse-frame .fuse-layer { animation: none !important; transform: none; }
 .revealed .fuse-frame .slice { display: none; }
 .revealed .fuse-tag { display: none; }
 .revealed .fuse-orig { opacity: 1; }
-.revealed .fuse-orig.left { transform: translate(calc(-50% - 570px), -50%) rotate(-6deg); }
-.revealed .fuse-orig.right { transform: translate(calc(-50% + 570px), -50%) rotate(5deg); }
+.revealed .fuse-orig.left { transform: translate(calc(-50% - 560px), -50%) rotate(-5deg); }
+.revealed .fuse-orig.right { transform: translate(calc(-50% + 560px), -50%) rotate(4deg); }
+/* в ответе оригиналы — крупные портреты 4:5, подписи ПОД фото, а не на лицах */
+.revealed .fuse-orig { top: calc(50% - 34px); height: calc(100% - 78px); aspect-ratio: 4 / 5; }
+.question.revealed:not(.t-text) { gap: 12px; }
+.revealed .fuse-orig img { object-position: 50% 22%; }
+.revealed .fuse-orig figcaption { bottom: auto; top: calc(100% + 16px); font-size: 28px; padding: 10px 20px; max-width: 520px; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------- кот в мешке / аукцион ---------- */
-.special { position: absolute; left: 0; right: 0; top: -58px; bottom: -214px; z-index: 30; display: grid; place-items: center; overflow: hidden; text-align: center; background: var(--pink); }
+.special { position: absolute; left: 0; right: 0; top: -58px; bottom: calc(-1 * var(--vb, 214px)); z-index: 30; display: grid; place-items: center; overflow: hidden; text-align: center; background: var(--pink); }
 .special.auction { background: var(--orange); }
 .special::before { content: ""; position: absolute; inset: 0; background-image: radial-gradient(circle, rgba(0, 0, 0, .25) 3px, transparent 3.6px); background-size: 26px 26px; }
 .special.out { animation: sp-out .55s cubic-bezier(.7, 0, .3, 1) forwards; }
@@ -347,22 +363,54 @@ body.idle { cursor: none; }
 .winner { display: flex; flex-direction: column; align-items: center; padding-top: 26px; overflow: hidden; }
 .winner .kicker { transform: rotate(-3deg); font-size: 40px; animation: slap .5s var(--ease-pop) both; --r: -3deg; }
 .winner .mega { --mega: 150px; margin-top: 20px; text-align: center; max-width: 1800px; }
-.podium { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); display: flex; align-items: flex-end; gap: 34px; }
+/* пьедестал по центру, «остальные» — колонкой справа (ничего не налезает на бронзу) */
+.podium-row { position: absolute; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; column-gap: 30px; padding: 0 40px; }
+.podium { grid-column: 2; min-width: 0; display: flex; align-items: flex-end; gap: 34px; }
+.has-rest .podium-row { grid-template-columns: minmax(0, 1fr) fit-content(1060px) minmax(0, 1fr); }
+.has-rest .podium { justify-content: center; }
+.has-rest .pcol.multi { flex: 0 1 auto; min-width: 250px; }
+.has-rest .podium { gap: 20px; }
 .pcol { width: 380px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
-.pcol .who { display: flex; flex-direction: column; align-items: center; gap: 10px; animation: who-in .7s var(--ease-pop) both; animation-delay: calc(var(--d) + .5s); }
-.pcol .ava { position: relative; width: 120px; height: 120px; border-radius: 22px; background: var(--tc); border: var(--line); box-shadow: var(--hard); display: grid; place-items: center; font-size: 72px; transform: rotate(-4deg); }
+.has-rest .pcol { width: 300px; }
+.pcol.multi { width: auto; min-width: 330px; max-width: calc(var(--n) * 150px + 60px); }
+.has-rest .pcol.multi { min-width: 300px; }
+.crowd .pcol.multi { max-width: 980px; }
+.pcol .who { position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px; animation: who-in .7s var(--ease-pop) both; animation-delay: calc(var(--d) + .5s); }
+.pcol .avas { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; max-width: 700px; }
+.pcol .ava { position: relative; width: 120px; height: 120px; border-radius: 22px; background: var(--tc); border: var(--line); box-shadow: var(--hard); display: grid; place-items: center; font-size: 72px; transform: rotate(calc(-4deg + var(--i, 0) * 7deg)); }
 .pcol.p1 .ava { width: 150px; height: 150px; font-size: 96px; animation: bob 2.2s 2s ease-in-out infinite; }
-.pcol .crown { position: absolute; top: -80px; font-size: 80px; filter: drop-shadow(6px 6px 0 var(--black)); animation: wob 1.6s ease-in-out infinite; }
+.pcol.multi .ava { width: 110px; height: 110px; font-size: 66px; }
+.pcol.p1.multi .ava { width: 130px; height: 130px; font-size: 80px; animation-delay: calc(2s + var(--i, 0) * .25s); }
+.crowd .pcol.multi .ava { width: 92px; height: 92px; font-size: 56px; }
+.crowd .pcol .avas, .crowd .pcol .nms { max-width: 980px; }
+.crowd .pcol.multi .nm { font-size: 20px; padding: 7px 12px; }
+.crowd .pcol.multi .crown { top: -84px; font-size: 80px; margin-left: -48px; }
+.pcol .crown { position: absolute; z-index: 2; top: -80px; left: 50%; margin-left: -48px; font-size: 80px; filter: drop-shadow(6px 6px 0 var(--black)); animation: wob 1.6s ease-in-out infinite; }
+.pcol.multi .crown { font-size: 96px; top: -96px; margin-left: -58px; } /* одна общая корона над всеми чемпионами */
+.pcol .nms { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 10px; max-width: 700px; }
 .pcol .nm { font-size: 30px; max-width: 380px; text-align: center; white-space: normal; line-height: 1.05; }
-.pcol .block { width: 100%; border: var(--line); border-bottom: 0; border-radius: 16px 16px 0 0; display: grid; place-items: start center; padding-top: 18px;
+.pcol.multi .nm { font-size: 24px; padding: 9px 16px; max-width: 330px; }
+.pcol .block { position: relative; width: 100%; border: var(--line); border-bottom: 0; border-radius: 16px 16px 0 0; display: flex; flex-direction: column; align-items: center; padding-top: 18px;
   background: var(--tc); color: var(--tx); box-shadow: 12px 0 0 var(--black);
   font: 400 110px/1 var(--font-display); transform-origin: 50% 100%; animation: rise .9s var(--ease-pop) both; animation-delay: var(--d); }
 .pcol .block small { display: block; font: 400 44px/1 var(--font-display); margin-top: 8px; }
+.pcol.multi .block { color: var(--white); -webkit-text-stroke: 3px var(--black); paint-order: stroke fill; text-shadow: 5px 5px 0 var(--black); }
+.pcol.multi .block small { -webkit-text-stroke: 2px var(--black); }
+.pcol .block .tie { position: absolute; top: -20px; right: -16px; z-index: 2; font-size: 22px; padding: 8px 14px; transform: rotate(6deg); -webkit-text-stroke: 0; text-shadow: none; }
 .pcol.p1 .block { height: 360px; } .pcol.p2 .block { height: 280px; } .pcol.p3 .block { height: 220px; }
+.crowd .pcol.p1 .block { height: 300px; } .crowd .pcol.p2 .block { height: 240px; } .crowd .pcol.p3 .block { height: 196px; }
+.crowd2 .pcol.p1 .block { height: 240px; } .crowd2 .pcol.p2 .block { height: 190px; } .crowd2 .pcol.p3 .block { height: 160px; }
+.crowd2 .pcol .block { font-size: 90px; padding-top: 12px; } .crowd2 .pcol .block small { font-size: 36px; }
+.crowd2 .pcol .ava, .crowd2 .pcol.p1 .ava, .crowd2 .pcol.multi .ava { width: 84px; height: 84px; font-size: 50px; }
+.crowd2 .pcol .nm, .crowd2 .pcol.multi .nm { font-size: 19px; padding: 6px 11px; }
 @keyframes rise { from { transform: scaleY(0); } }
 @keyframes who-in { from { opacity: 0; transform: translateY(80px) scale(.4) rotate(-20deg); } }
-.others { position: absolute; right: 50px; bottom: 50px; display: flex; flex-direction: column; gap: 14px; align-items: flex-end; }
-.others .chip { font-size: 24px; }
+.others { grid-column: 3; justify-self: stretch; align-self: end; margin-bottom: 40px; min-width: 0; display: flex; flex-direction: column; gap: 14px; align-items: flex-start; }
+.others .chip { font-size: 20px; max-width: 100%; min-width: 0; padding: 8px 18px 8px 8px; gap: 10px; animation-delay: calc(var(--d, 0s) + 1.6s); }
+.others .chip .e { width: 42px; height: 42px; font-size: 26px; flex: 0 0 auto; }
+.others .chip .pl { flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--black); color: var(--lime); font: 400 22px/1 var(--font-display); }
+.others .chip .cn { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.others .chip .cs { flex: 0 0 auto; font: 400 26px/1 var(--font-display); margin-left: 4px; }
 
 /* ---------- счёт команд: стикеры ---------- */
 #scorebar { position: absolute; left: 40px; right: 40px; bottom: 80px; height: 118px; display: flex; gap: 24px; z-index: 20; transition: transform .6s var(--ease-pop), opacity .3s; }
@@ -372,10 +420,29 @@ body.idle { cursor: none; }
   transform: rotate(var(--r)); transition: transform .35s var(--ease-pop), filter .3s, opacity .3s, background-color .2s; }
 .team:nth-child(odd) { --r: -1.2deg; } .team:nth-child(even) { --r: 1.2deg; }
 .team .ava { flex: 0 0 auto; width: 82px; height: 82px; border-radius: 12px; background: var(--tc); border: var(--line); display: grid; place-items: center; font-size: 50px; transform: rotate(-5deg); }
-.team .meta { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-.team .nm { font: 800 22px/1.05 var(--font-head); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.team .sc { font: 400 48px/1 var(--font-display); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.team .meta { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.team .nm { max-width: 100%; font: 800 22px/1.05 var(--font-head); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.team .sc { max-width: 100%; font: 400 48px/1 var(--font-display); letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .team .sc.neg { color: var(--red); }
+/* минус на цветной плашке (владелец кота/аукциона, нажавшие) — чёрный стикер, чтобы красный не тонул в оранжевом */
+.team.owner .sc.neg, .team.buzzed .sc.neg { color: #FF5A5A; background: var(--black); padding: 4px 10px 2px; border-radius: 8px; transform: rotate(-2deg); }
+/* 5–6 команд: плашки компактнее */
+#scorebar.compact { gap: 18px; left: 30px; right: 30px; }
+#scorebar.compact .team { gap: 12px; padding: 0 14px 0 10px; }
+#scorebar.compact .team .ava { width: 66px; height: 66px; font-size: 40px; }
+#scorebar.compact .team .nm { font-size: 18px; line-height: 1.04; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+#scorebar.compact .team .meta { gap: 4px; }
+#scorebar.compact .team .sc { font-size: 42px; }
+/* 7–8 команд: два ряда по 4 */
+#scorebar.rows2 { height: 186px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 16px 22px; }
+#scorebar.rows2 .team { gap: 12px; padding: 0 16px 0 10px; }
+#scorebar.rows2 .team .ava { width: 58px; height: 58px; font-size: 36px; border-width: 3px; }
+#scorebar.rows2 .team .meta { gap: 3px; }
+#scorebar.rows2 .team .nm { font-size: 17px; line-height: 1.04; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+#scorebar.rows2 .team .sc { font-size: 36px; }
+#scorebar.rows2 .team kbd { top: -12px; font-size: 15px; padding: 4px 8px; }
+#scorebar.rows2 .team .crown { top: -40px; font-size: 40px; }
+#scorebar.rows2 .team.buzzed { transform: rotate(-3deg) translateY(-12px) scale(1.04); }
 .team kbd { position: absolute; right: -10px; top: -16px; font: 400 18px var(--font-mono); padding: 5px 10px; border-radius: 8px; background: var(--black); color: var(--lime); transform: rotate(8deg); }
 .team .crown { position: absolute; left: 6px; top: -50px; font-size: 52px; display: none; filter: drop-shadow(4px 4px 0 var(--black)); animation: wob 1.6s ease-in-out infinite; }
 .team.lead .crown { display: block; }
@@ -427,8 +494,14 @@ body.idle { cursor: none; }
 #boot-error { position: fixed; inset: auto 20px 20px 20px; z-index: 300; background: var(--white); border: var(--line); padding: 16px; font: 700 16px var(--font-body); }
 
 @media (prefers-reduced-motion: reduce) {
-  #grain, .shape, #bg::before, .ticker .track, .cell { animation: none !important; }
+  #grain, .shape, #bg::before, .ticker .track, .cell, .letters .ch, .wiggle .ch, .emoji-row .emo, .stamp, .float-stk,
+  .special .stripes, #buzz .stripes, .money, .fuse-layer, .pcol .ava, .pcol .crown, .team .crown, .press-hint { animation: none !important; }
 }
+/* слабая графика (4K без аппаратного ускорения: screen.js меряет fps и ставит .lowfx) —
+   фон и зерно замирают, ячейки табло не «дышат»; всё остальное (вылеты, конфетти, таймер) остаётся */
+.lowfx #grain, .lowfx #bg::before, .lowfx .shape { animation: none !important; }
+.lowfx .cell:not(.picked) { animation: slap .6s var(--ease-pop) both; animation-delay: var(--d); }
+.lowfx .cell.used { animation: none; }
 
 /* ---------- вход с телефона: QR-карточка ---------- */
 .join-card { position: absolute; z-index: 4; display: flex; flex-direction: column; align-items: center; gap: 12px;

@@ -31,3 +31,15 @@ Sources: Wikimedia Commons (unless noted). Images were resized/cropped and conve
 | tom-holland | [File:TomHolland-byPhilipRomano.jpg](https://commons.wikimedia.org/wiki/File:TomHolland-byPhilipRomano.jpg) | PhilipRomano | CC BY-SA 4.0 |
 | tung-tung-tung-sahur | [File:Full image of Tung Tung Tung Sahur.png](https://commons.wikimedia.org/wiki/File:Full_image_of_Tung_Tung_Tung_Sahur.png) | noxaasht | Public domain |
 | zendaya | [File:Zendaya-byPhilipRomano.jpg](https://commons.wikimedia.org/wiki/File:Zendaya-byPhilipRomano.jpg) | PhilipRomano | CC BY-SA 4.0 |
+
+# Font credits
+
+Fonts are self-hosted in `assets/fonts/` (WOFF2, Cyrillic + Latin subsets, downloaded from Google Fonts / fonts.gstatic.com on 16.10.2026).
+All are licensed under the [SIL Open Font License 1.1](https://openfontlicense.org).
+
+| family | files | author | license |
+|---|---|---|---|
+| Dela Gothic One (400) | dela-gothic-one-cyrillic.woff2, dela-gothic-one-latin.woff2 | artakana | OFL 1.1 |
+| Unbounded (variable, used 700–900) | unbounded-cyrillic.woff2, unbounded-latin.woff2 | NaN (Unbounded Project Authors) | OFL 1.1 |
+| Manrope (variable, used 400–800) | manrope-cyrillic.woff2, manrope-latin.woff2 | Mikhail Sharanda (Manrope Project Authors) | OFL 1.1 |
+| Rubik Mono One (400) | rubik-mono-one-cyrillic.woff2, rubik-mono-one-latin.woff2 | Hubert & Fischer (Rubik Project Authors) | OFL 1.1 |

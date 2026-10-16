@@ -165,9 +165,13 @@
           <div class="row">${s.teams.map((t) => `<button class="btn ${cur.owner === t.id ? 'pink' : ''}" data-act="owner" data-id="${t.id}">${esc(t.emoji)} ${esc(t.name)}</button>`).join('')}</div>
           ${isCat ? '' : `
             <h3>Ставка</h3>
+            <p class="muted small" style="margin:0 0 8px">${owner
+              ? `От ${nominal} до ${Math.max(owner.score, nominal)} (номинал или весь счёт «${esc(owner.name)}», что больше). Пустое поле — номинал.`
+              : `Сначала выбери команду. Ставка — от номинала ${nominal} до счёта команды.`}</p>
             <div class="row">
-              <div class="grow" style="min-width:120px"><input type="number" id="bet-input" data-input="bet" min="0" step="100" value="${cur.bet || ''}" placeholder="${nominal}" inputmode="numeric"></div>
-              ${[nominal, nominal * 2, owner ? Math.max(owner.score, nominal) : null].filter((v, i, a) => v && a.indexOf(v) === i)
+              <div class="grow" style="min-width:120px"><input type="number" id="bet-input" data-input="bet" min="${nominal}" ${owner ? `max="${Math.max(owner.score, nominal)}"` : ''} step="100" value="${cur.bet || ''}" placeholder="${nominal}" inputmode="numeric"></div>
+              ${[nominal, nominal * 2, owner ? Math.max(owner.score, nominal) : null]
+                .filter((v, i, a) => v && a.indexOf(v) === i && (!owner || v <= Math.max(owner.score, nominal)))
                 .map((v) => `<button class="btn sm" data-act="betQuick" data-bet="${v}">${v}</button>`).join('')}
             </div>`}
           <div class="row" style="margin-top:12px">
@@ -226,17 +230,23 @@
       body = `<p class="muted">На экране «Финалочка» и тема. Дальше — ставки.</p>
         <button class="btn big lime" data-act="finalStage" data-stage="bets">Собрать ставки →</button>`;
     } else if (st === 'bets') {
-      body = `<p class="muted small">Ставка от 0 до текущего счёта команды (по правилам). Гостям видно только, кто уже поставил.</p>
-        ${s.teams.map((t) => `
-          <div class="final-bet"><div class="jname">${av(t)}<span>${esc(t.name)} <span class="muted small">(${t.score})</span></span></div>
-          <input type="number" id="fbet-${t.id}" data-input="finalBet" data-id="${t.id}" min="0" step="100" inputmode="numeric" value="${s.final.bets[t.id] !== undefined ? s.final.bets[t.id] : ''}" placeholder="0"></div>`).join('')}
+      body = `<p class="muted small">Ставка от 0 до текущего счёта команды (больше не примет). Счёт 0 или минус — команда ставит 0. Пустое поле = 0. Гостям видно только, кто уже поставил.</p>
+        ${s.teams.map((t) => {
+          const max = U.finalMaxBet(t);
+          const has = s.final.bets[t.id] !== undefined;
+          return `
+          <div class="final-bet"><div class="jname">${av(t)}<span>${esc(t.name)} <span class="muted small">(${U.fmtScore(t.score)}${max > 0 ? ', макс. ' + max : ''})</span></span></div>
+          ${max > 0
+            ? `<input type="number" id="fbet-${t.id}" data-input="finalBet" data-id="${t.id}" min="0" max="${max}" step="100" inputmode="numeric" value="${has ? s.final.bets[t.id] : ''}" placeholder="0">`
+            : '<span class="muted small fb-zero">счёт ≤ 0 — ставка 0</span>'}</div>`;
+        }).join('')}
         <button class="btn big lime" data-act="finalStage" data-stage="question">Показать вопрос →</button>`;
     } else {
       body = `<div class="judge">${s.teams.map((t) => {
           const bet = s.final.bets[t.id] || 0;
           const res = s.final.results[t.id];
           return `<div class="jrow" style="${tv(t)}">
-            <div class="jname">${av(t)}<span>${esc(t.name)} · ставка ${bet}</span></div>
+            <div class="jname">${av(t)}<span>${esc(t.name)} · ставка ${bet}${U.finalMaxBet(t) > 0 || s.final.results[t.id] !== undefined ? '' : ' (счёт ≤ 0)'}</span></div>
             ${res === undefined
               ? `<button class="btn lime" data-act="finalJudge" data-id="${t.id}" data-ok="1">✓ +${bet}</button>
                  <button class="btn pink" data-act="finalJudge" data-id="${t.id}" data-ok="0">✗ −${bet}</button>`
@@ -253,11 +263,13 @@
   }
 
   function renderWinner(s) {
-    const sorted = s.teams.slice().sort((a, b) => b.score - a.score);
+    const places = U.placesOf(s.teams);
+    const tie1 = places[0] && places[0].teams.length > 1;
+    const ties = places.filter((g) => g.teams.length > 1 && g.place <= 3).map((g) => g.place + '-е');
     return `
       <section class="card">
-        <h2>🏆 Победитель на экране</h2>
-        <div class="stack">${sorted.map((t, i) => `<div class="jname">${i + 1}. ${av(t)}<span>${esc(t.name)} — ${t.score}</span></div>`).join('')}</div>
+        <h2>🏆 ${tie1 ? 'Ничья за 1-е место' : 'Победитель'} на экране ${ties.length ? `<span class="pill pink">ничья: ${ties.join(', ')} место</span>` : ''}</h2>
+        <div class="stack">${places.map((g) => g.teams.map((t) => `<div class="jname">${g.place}${g.teams.length > 1 ? '=' : ''}. ${av(t)}<span>${esc(t.name)} — ${U.fmtScore(t.score)}</span></div>`).join('')).join('')}</div>
         <div class="row" style="margin-top:14px">
           <button class="btn" data-act="backToFinal">← Назад к финалу</button>
         </div>
@@ -303,7 +315,7 @@
           ${s.teams.map((t) => `
             <div class="score-row">
               <div class="jname">${av(t)}<span>${esc(t.name)}</span></div>
-              <span class="val ${t.score < 0 ? 'neg' : ''}">${t.score}</span>
+              <span class="val ${t.score < 0 ? 'neg' : ''}">${U.fmtScore(t.score)}</span>
               <button class="btn sm" data-act="adjust" data-id="${t.id}" data-delta="-100" aria-label="минус 100" title="−100">−</button>
               <button class="btn sm" data-act="adjust" data-id="${t.id}" data-delta="100" aria-label="плюс 100" title="+100">+</button>
             </div>`).join('')}
@@ -530,10 +542,19 @@
 
   const d = (a) => S.dispatch(a);
 
+  // После судейства/перехода пульт перерисовывается, и строки команд меняются местами
+  // (нажавшая команда — сверху). Второй клик двойного нажатия попал бы в ДРУГУЮ кнопку
+  // (чужой ✗ или «К табло»), поэтому сразу после такого действия клики в панели игнорируем.
+  const SHIFTY = ['judge', 'reveal', 'board', 'open', 'showQuestion', 'finalStage', 'showWinner'];
+  let shiftyAt = 0;
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-act]');
     if (!b || b.disabled) return;
     const a = b.dataset.act, id = b.dataset.id;
+    if (b.closest('#main')) {
+      if (Date.now() - shiftyAt < 450 && SHIFTY.includes(a)) return;
+      if (SHIFTY.includes(a)) shiftyAt = Date.now();
+    }
     const s = S.get();
     switch (a) {
       case 'openScreen': openScreen(); break;
@@ -617,7 +638,7 @@
     if (kind === 'teamName') d({ type: 'teamUpdate', id, patch: { name: el.value } });
     else if (kind === 'teamEmoji') d({ type: 'teamUpdate', id, patch: { emoji: el.value.trim() || '⭐' } });
     else if (kind === 'bet') d({ type: 'setBet', bet: el.value });
-    else if (kind === 'finalBet') { if (el.value !== '') d({ type: 'finalBet', teamId: id, bet: el.value }); }
+    else if (kind === 'finalBet') d({ type: 'finalBet', teamId: id, bet: el.value });
     else if (kind === 'duration') d({ type: 'timerDuration', seconds: +el.value });
     else if (kind === 'lanIp') { window.Net.setLanIp(el.value); render(); }
     else if (kind === 'answerSeconds') d({ type: 'answerSeconds', seconds: +el.value });
@@ -682,6 +703,16 @@
     lastEvent = Math.max(lastEvent, s.eventSeq || 0);
   }
 
+  /** Картинки вопросов — в кэш заранее, чтобы превью открывались без задержки. */
+  const preloaded = [];
+  function preloadImages(q) {
+    const list = [];
+    const add = (m) => { if (!m) return; (m.images || []).forEach((x) => list.push(x)); if (m.fused) list.push(m.fused); };
+    (q.rounds || []).forEach((R) => R.categories.forEach((c) => c.questions.forEach((x) => add(x.media))));
+    if (q.final) add(q.final.media);
+    Array.from(new Set(list)).forEach((src) => { const im = new Image(); im.decoding = 'async'; im.src = src; preloaded.push(im); });
+  }
+
   /* ---------- старт ---------- */
   window.loadQuiz().then((res) => {
     quiz = res.quiz;
@@ -689,6 +720,7 @@
     S.setQuiz(quiz);
     lastEvent = S.get().eventSeq || 0;
     S.subscribe((s) => { onEvents(s); render(); });
+    preloadImages(quiz);
     if (window.Remote) { window.Remote.onChange(render); window.Remote.start(); }
     render();
   });

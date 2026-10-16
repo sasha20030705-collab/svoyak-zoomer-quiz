@@ -2,30 +2,33 @@
    Редактор аватара команды на телефоне: «нарисовать» и «загрузить» + кадрирование.
    AvatarEditor.draw({ color, onDone(dataUrl), onCancel })
    AvatarEditor.upload({ color, onDone(dataUrl), onCancel })  — открывает выбор файла
-   Итог — квадрат 256×256, WebP/JPEG, не больше ~40 КБ.
+   Итог — квадрат 256×256, WebP/JPEG; dataURL не длиннее MAX_URL символов (~36 КБ):
+   пульт отбрасывает аватары длиннее 60 000 символов, а shiftr рвёт сообщения больше 64 000 байт.
    ========================================================================== */
 (function () {
   'use strict';
   const OUT = 256;
-  const MAX_BYTES = 40000;
+  const MAX_URL = 48000;          // длина dataURL (base64) — с запасом до лимита пульта 60 000
   const COLORS = ['#0A0A0A', '#FFFFFF', '#C6FF00', '#FF2E93', '#2B4BFF', '#FF6A00', '#FFE600', '#00D1FF'];
   const BGS = ['#FFFFFF', '#C6FF00', '#FF2E93', '#2B4BFF', '#FF6A00', '#FFE600', '#0A0A0A'];
   const SIZES = [6, 16, 34];
 
   const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
 
-  /** Сжать canvas до ≤ MAX_BYTES: WebP, если умеет браузер, иначе JPEG; качество вниз по шагам. */
+  /** Сжать canvas до ≤ MAX_URL: WebP, если умеет браузер, иначе JPEG; качество вниз по шагам,
+      потом — меньше пикселей. Результат всегда проходит проверку размера. */
   function exportSmall(canvas) {
-    const bytes = (url) => Math.ceil((url.length - url.indexOf(',') - 1) * 3 / 4);
     let type = 'image/webp';
     if (canvas.toDataURL(type, 0.8).indexOf('data:image/webp') !== 0) type = 'image/jpeg';
     let q = 0.82, url = canvas.toDataURL(type, q);
-    while (bytes(url) > MAX_BYTES && q > 0.3) { q -= 0.08; url = canvas.toDataURL(type, q); }
-    if (bytes(url) > MAX_BYTES) { // крайний случай — уменьшаем размер
+    while (url.length > MAX_URL && q > 0.3) { q -= 0.08; url = canvas.toDataURL(type, q); }
+    // крайний случай (шумное фото) — уменьшаем размер, пока не влезет
+    for (const side of [192, 144, 112, 80]) {
+      if (url.length <= MAX_URL) break;
       const c = document.createElement('canvas');
-      c.width = c.height = 192;
-      c.getContext('2d').drawImage(canvas, 0, 0, 192, 192);
-      url = c.toDataURL('image/jpeg', 0.6);
+      c.width = c.height = side;
+      c.getContext('2d').drawImage(canvas, 0, 0, side, side);
+      for (const qq of [0.6, 0.45, 0.3]) { url = c.toDataURL('image/jpeg', qq); if (url.length <= MAX_URL) break; }
     }
     return url;
   }
@@ -160,7 +163,17 @@
     let F = 260, s = 1, x = 0, y = 0, rot = 0, iw = 1, ih = 1;
 
     function base() { return F / Math.min(iw, ih); } // «cover»: кадр всегда заполнен
+    /** Не даём утащить фото за рамку: сдвиг не больше, чем картинка выступает за кадр. */
+    function clamp() {
+      const sc = base() * s;
+      const turned = rot % 180 !== 0;
+      const w = (turned ? ih : iw) * sc, h = (turned ? iw : ih) * sc;
+      const mx = Math.max(0, (w - F) / 2), my = Math.max(0, (h - F) / 2);
+      x = Math.max(-mx, Math.min(mx, x));
+      y = Math.max(-my, Math.min(my, y));
+    }
     function apply() {
+      clamp();
       img.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px) rotate(${rot}deg) scale(${base() * s})`;
       zoom.value = s;
     }

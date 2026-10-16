@@ -202,7 +202,6 @@
         <div class="float-stk emoji-font r-side" style="left:70px;top:380px;font-size:120px;filter:drop-shadow(8px 8px 0 #0A0A0A);animation-delay:-1s">🎂</div>
         <div class="float-stk emoji-font r-side" style="right:60px;top:560px;font-size:110px;filter:drop-shadow(8px 8px 0 #0A0A0A);animation-delay:-2.5s">💿</div>
         <div class="center">
-          <span class="tag white" style="transform:rotate(-3deg)">квиз на днюху</span>
           <h1 class="mega wiggle" style="--mega:${megaSize(main, 320)}px">${letters(main, 200)}</h1>
           ${sub ? `<div class="sub-row"><span class="tag lime" style="transform:rotate(2deg);font-size:40px">${esc(sub)}</span></div>` : ''}
           <div class="join"></div>

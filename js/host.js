@@ -423,8 +423,28 @@
 
   /* ---------- музыка ---------- */
   const MUSIC_SLOTS = [['board', 'Табло'], ['question', 'Вопрос'], ['final', 'Финал']];
+  const MUSIC_STYLES = [
+    ['phonk', '🏎️', 'Фонк', 'дрифт-808'],
+    ['show', '🎺', 'Шоу', 'как на ТВ'],
+    ['chip', '👾', '8-бит', 'чиптюн'],
+  ];
+  let previewMode = 'board';   // что слушать на пульте: табло / вопрос
+  let previewOn = false;
+  function stopMusicPreview() { if (window.Music && previewOn) window.Music.stopPreview(true); previewOn = false; }
+  function startMusicPreview() {
+    const m = Object.assign({ volume: 0.5, style: 'phonk' }, S.get().music || {});
+    if (!window.Music || !window.Music.preview) { toast('Музыкальный модуль не загрузился'); return; }
+    previewOn = !!window.Music.preview({
+      style: m.style, mode: previewMode, seconds: 8, volume: m.volume,
+      onEnd() { previewOn = false; render(); },
+    });
+    render();
+  }
   function renderMusic(s) {
-    const m = Object.assign({ enabled: true, volume: 0.5, sfx: 0.8, files: {} }, s.music || {});
+    const m = Object.assign({ enabled: true, volume: 0.5, sfx: 0.8, style: 'phonk', files: {} }, s.music || {});
+    const styles = MUSIC_STYLES.map(([k, ico, name, sub]) => `<button class="mus-style ms-${k} ${m.style === k ? 'on' : ''}" data-act="musicStyle" data-style="${k}" aria-pressed="${m.style === k}">
+        <span class="ms-ico">${ico}</span><b>${name}</b><small>${sub}</small></button>`).join('');
+    const own = m.files[previewMode];
     const slots = MUSIC_SLOTS.map(([k, label]) => {
       const f = m.files[k];
       return `<div class="mus-row">
@@ -439,6 +459,16 @@
         <button class="btn wide ${m.muted ? 'pink' : ''}" style="margin-bottom:10px" data-act="screenMute">${m.muted ? '🔇 звук на экране выключен — включить' : '🔊 звук на экране включён — заглушить'}</button>
         <div class="mus-vol"><span>музыка</span><input type="range" min="0" max="100" value="${Math.round(m.volume * 100)}" data-music-range="volume" aria-label="громкость музыки"></div>
         <div class="mus-vol"><span>эффекты</span><input type="range" min="0" max="100" value="${Math.round(m.sfx * 100)}" data-music-range="sfx" aria-label="громкость эффектов"></div>
+        <h3>Стиль встроенной музыки</h3>
+        <div class="mus-styles">${styles}</div>
+        <div class="mus-prev">
+          <div class="mus-seg">
+            <button class="btn sm ${previewMode === 'board' ? 'black' : ''}" data-act="previewMode" data-mode="board">табло</button>
+            <button class="btn sm ${previewMode === 'question' ? 'black' : ''}" data-act="previewMode" data-mode="question">вопрос</button>
+          </div>
+          <button class="btn ${previewOn ? 'pink' : 'lime'}" data-act="musicPreview" id="mus-preview">${previewOn ? '■ стоп' : '▶ послушать'}</button>
+        </div>
+        <p class="muted small" style="margin:0 0 8px">Прослушка 8 секунд — в динамиках пульта${own ? '; на экране в этом режиме играет твой файл' : ''}. «Вопрос» — конец таймера с отсчётом 5…1. Финал у всех стилей общий.</p>
         ${slots}
         <p class="muted small" style="margin:8px 0 0">Свои mp3/m4a хранятся в этом браузере и играют на экране гостей (открой его здесь же). Звук пойдёт после первого клика по экрану гостей.</p>
       </section>`;
@@ -500,6 +530,15 @@
     if (tu) tu.hidden = !(s.timer.kind === 'answer' && s.timer.running && rem === 0 && s.buzzer.winner);
   }
   setInterval(tickTimer, 100);
+
+  /* Присутствие для экрана гостей в этом браузере: отвечаем на ping через BroadcastChannel.
+     Таймеры фоновой вкладки Chrome душит (heartbeat замка протухает), а сообщения доходят сразу. */
+  try {
+    const presence = new BroadcastChannel('svoyak:presence');
+    const pong = () => { try { presence.postMessage({ t: 'pong', from: 'host', at: Date.now() }); } catch (e) { /* ignore */ } };
+    presence.onmessage = (e) => { if (e.data && e.data.t === 'ping') pong(); };
+    pong();
+  } catch (e) { /* старый браузер: остаётся замок в localStorage */ }
 
   /** «Экран для гостей: подключён (здесь / по сети) / не подключён». */
   function screenStateHtml() {
@@ -597,6 +636,19 @@
       case 'showWinner': d({ type: 'showWinner' }); break;
       case 'backToFinal': d({ type: 'backToFinal' }); break;
       case 'screenMute': d({ type: 'musicSet', patch: { muted: !(s.music && s.music.muted) } }); break;
+      case 'musicStyle': {
+        const st = b.dataset.style;
+        d({ type: 'musicSet', patch: { style: st } });
+        if (previewOn) startMusicPreview(); // слушаем — сразу переключаем на новый стиль
+        break;
+      }
+      case 'previewMode':
+        previewMode = b.dataset.mode === 'question' ? 'question' : 'board';
+        if (previewOn) startMusicPreview(); else render();
+        break;
+      case 'musicPreview':
+        if (previewOn) { stopMusicPreview(); render(); } else startMusicPreview();
+        break;
       case 'musicToggle': d({ type: 'musicSet', patch: { enabled: !(s.music && s.music.enabled === false ? false : true) } }); break;
       case 'musicDel': {
         const key = b.dataset.key;

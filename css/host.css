@@ -176,3 +176,17 @@ input:focus, select:focus, .btn:focus-visible { outline: 3px solid var(--blue); 
 #net-diag { margin-top: 6px; padding: 8px; border: 2px dashed #c9c4b5; border-radius: 8px; background: var(--paper); word-break: break-word; }
 #screen-url { font: 600 16px var(--font-body); min-height: 36px; } /* < 16px — iOS зумит страницу при фокусе */
 .fb-zero { text-align: right; line-height: 1.2; }
+/* музыка: выбор стиля — крупные стикеры */
+.mus-styles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 6px 0 12px; }
+.mus-style { display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 92px; padding: 10px 6px; border: 3px solid var(--black); border-radius: 14px; background: var(--white); color: var(--black); box-shadow: 4px 4px 0 var(--black); cursor: pointer; font: 400 17px/1.1 var(--font-display); transition: transform .12s; }
+.mus-style:nth-child(1) { transform: rotate(-2deg); } .mus-style:nth-child(2) { transform: rotate(1.5deg); } .mus-style:nth-child(3) { transform: rotate(-1deg); }
+.mus-style .ms-ico { font-size: 28px; line-height: 1.1; }
+.mus-style small { font: 700 11px var(--font-head); text-transform: uppercase; opacity: .75; }
+.mus-style:hover { transform: rotate(0) translateY(-2px); }
+.mus-style:active { transform: translate(3px, 3px); box-shadow: 0 0 0 var(--black); }
+.mus-style.on { box-shadow: 6px 6px 0 var(--black); outline: 3px solid var(--black); outline-offset: 2px; }
+.mus-style.ms-phonk.on { background: var(--pink); color: var(--white); }
+.mus-style.ms-show.on { background: var(--orange); }
+.mus-style.ms-chip.on { background: var(--lime); }
+.mus-prev { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
+.mus-seg { display: flex; gap: 6px; }

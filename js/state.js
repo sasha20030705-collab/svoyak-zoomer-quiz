@@ -128,7 +128,7 @@
       eventSeq: 0,
       room: null,                // код комнаты для телефонов-баззеров (показывается, вводится руками)
       netKey: null,              // секрет комнаты: топики MQTT, идёт в QR-ссылку
-      music: { enabled: true, volume: 0.5, sfx: 0.8, files: {} }, // files: mode → {name, at} (сами файлы — в IndexedDB)
+      music: { enabled: true, volume: 0.5, sfx: 0.8, style: 'phonk', files: {} }, // style: phonk|show|chip; files: mode → {name, at} (сами файлы — в IndexedDB)
       net: { status: 'off', devices: 0, byTeam: {}, transport: '' }, // публикует пульт
     };
   }
@@ -457,7 +457,7 @@
         if (a.key) s.netKey = a.key;
         break;
       case 'musicSet':
-        s.music = Object.assign({ enabled: true, volume: 0.5, sfx: 0.8, files: {} }, s.music || {}, a.patch);
+        s.music = Object.assign({ enabled: true, volume: 0.5, sfx: 0.8, style: 'phonk', files: {} }, s.music || {}, a.patch);
         break;
       case 'netInfo':
         s.net = Object.assign({}, s.net || {}, a.net);

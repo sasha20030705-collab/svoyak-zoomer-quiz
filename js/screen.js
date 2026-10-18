@@ -947,8 +947,8 @@
   const musicLoaded = {}; // mode → at загруженного своего файла
   let musicSyncAt = 0;
   function musicSettings(s) {
-    const m = Object.assign({ enabled: true, volume: 0.5, sfx: 0.8, files: {} }, s.music || {});
-    window.Music.configure({ enabled: m.enabled, volume: m.volume });
+    const m = Object.assign({ enabled: true, volume: 0.5, sfx: 0.8, style: 'phonk', files: {} }, s.music || {});
+    window.Music.configure({ enabled: m.enabled, volume: m.volume, style: m.style });
     window.Sfx.setSfxVolume(m.sfx);
     // «звук на экране вкл/выкл» с пульта глушит всё: и музыку, и эффекты
     if (window.Sfx.isMuted() !== !!m.muted) window.Sfx.setMuted(!!m.muted);
@@ -967,18 +967,19 @@
     });
   }
   function musicTick(s) {
-    let mode = 'board', inten = 0, duck = false;
+    let mode = 'board', inten = 0, duck = false, remain = Infinity;
     const t = s.timer, rem = U.timerRemaining(t), total = t.duration * 1000;
     const started = t.running || rem < total;
     if (s.phase === 'question' && s.current) {
       mode = s.current.stage === 'answer' ? 'board' : 'question'; // ответ показан — обратно к «табло»
       duck = !!s.buzzer.winner;                                   // «ПЕРВЫЕ!» — музыка проваливается
       if (s.current.stage === 'question' && started) inten = 1 - rem / total;
+      if (s.current.stage === 'question' && t.running) remain = rem / 1000; // 5…1 — дробь-подъём
     } else if (s.phase === 'final') {
       mode = 'final';
       if (s.final.stage === 'question' && started) inten = 1 - rem / total;
     }
-    window.Music.update({ mode, intensity: inten, duck });
+    window.Music.update({ mode, intensity: inten, duck, remain });
     const now = performance.now();
     if (now - musicSyncAt > 1000) { musicSyncAt = now; syncMusicFiles(s); }
   }
@@ -1041,6 +1042,9 @@
   function localHostAlive() {
     try { const l = JSON.parse(localStorage.getItem('svoyak:host-lock') || 'null'); return !!(l && Date.now() - l.at < 6000); } catch (e) { return false; }
   }
+  // была ли в этом браузере игра до открытия экрана (пульт уже что-то сохранял)
+  let hadLocalGame = false;
+  try { hadLocalGame = !!localStorage.getItem('svoyak:state:v1'); } catch (e) { /* ignore */ }
   const netMode = !!netRoom && !(localHostAlive() && Store.get().room === netRoom);
   const badge = $('#net-badge'), connectEl = $('#connect');
   function showBadge(text) { badge.hidden = !text; badge.textContent = text || ''; }
@@ -1049,13 +1053,35 @@
     lastEvent = Store.get().eventSeq || 0; // старые события не проигрываем
     render();
     musicSettings(Store.get());
-    Store.subscribe((s) => { processEvents(s); render(); musicSettings(s); });
+    // признаки живого пульта: любое состояние от него (BroadcastChannel/storage), pong, свежий замок
+    let lastHostSign = localHostAlive() ? Date.now() : 0;
+    let sawHost = !!lastHostSign;
+    const hostSign = () => { lastHostSign = Date.now(); if (!sawHost) { sawHost = true; connectEl.hidden = true; } };
+    Store.subscribe((s, a) => { if (!a) hostSign(); processEvents(s); render(); musicSettings(s); });
+    window.addEventListener('storage', (e) => { if (e.key && e.key.indexOf('svoyak:') === 0 && e.key !== 'svoyak:screen-local') hostSign(); });
+    // ping пульту через BroadcastChannel: обработчики сообщений в фоновой вкладке не душатся, как таймеры
+    let presence = null;
+    try { presence = new BroadcastChannel('svoyak:presence'); } catch (e) { /* старый браузер */ }
+    const ping = () => { if (presence) try { presence.postMessage({ t: 'ping', from: 'screen', at: Date.now() }); } catch (e) { /* ignore */ } };
+    if (presence) presence.onmessage = (e) => { const m = e.data || {}; if (m.from === 'host') hostSign(); };
+    ping();
     // отмечаемся для пульта: «экран открыт здесь»
     const beat = () => { try { localStorage.setItem('svoyak:screen-local', String(Date.now())); } catch (e) { /* ignore */ } };
     beat(); setInterval(beat, 2000);
-    // без пульта в этом браузере и без кода — предлагаем подключиться по сети
-    const checkHost = () => { connectEl.hidden = localHostAlive(); };
-    setTimeout(() => { checkHost(); setInterval(checkHost, 2000); }, 2500);
+    /* Форма «подключиться к пульту» — ТОЛЬКО на чистом устройстве: нет сохранённой игры,
+       нет ?room/&k в адресе и пульт не объявился за 8 с. Если пульт хоть раз был виден —
+       форма больше не появляется никогда (пульт в фоне троттлится, это не повод перекрывать игру). */
+    const clean = !hadLocalGame && !P.get('room') && !P.get('k');
+    if (clean) setTimeout(() => { if (!sawHost && !localHostAlive()) connectEl.hidden = false; }, 8000);
+    // долгое молчание — только маленький значок в углу
+    const quiet = document.createElement('div');
+    quiet.id = 'host-quiet'; quiet.hidden = true; quiet.textContent = 'пульт молчит';
+    document.body.appendChild(quiet);
+    setInterval(() => {
+      ping();
+      if (localHostAlive()) hostSign();
+      quiet.hidden = !sawHost || Date.now() - lastHostSign < 30000;
+    }, 4000);
     $('#connect-form').addEventListener('submit', (e) => {
       e.preventDefault();
       const code = $('#connect-code').value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);

@@ -50,16 +50,6 @@
     "wiki": "Jacob_Elordi"
   },
   {
-    "slug": "rose",
-    "query": "Rosé Blackpink singer",
-    "wiki": "Rosé_(singer)"
-  },
-  {
-    "slug": "bruno-mars",
-    "query": "Bruno Mars",
-    "wiki": "Bruno_Mars"
-  },
-  {
     "slug": "garik-kharlamov",
     "query": "Гарик Харламов",
     "wiki": "Garik_Kharlamov"
@@ -80,69 +70,166 @@
     "wiki": null
   },
   {
-    "slug": "jenna-ortega",
-    "query": "Jenna Ortega",
-    "wiki": "Jenna_Ortega",
-    "commons": "Jenna_Ortega-63799_(cropped).jpg",
-    "note": "zoom-точка рассчитана по этому фото"
+    "slug": "blackpink",
+    "query": "BLACKPINK group photo all four members",
+    "wiki": "Blackpink",
+    "note": "Все четыре в рост (слева направо Розэ, Дженни, Джису, Лиса), CC BY 3.0.",
+    "commons": "Blackpink_Pink_Carpet_Event_1.jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4b/Blackpink_Pink_Carpet_Event_1.jpg/1280px-Blackpink_Pink_Carpet_Event_1.jpg"
   },
   {
-    "slug": "pedro-pascal",
-    "query": "Pedro Pascal",
-    "wiki": "Pedro_Pascal",
-    "commons": "Pedro_Pascal_at_the_2026_New_York_Film_Festival-042.jpg",
-    "note": "zoom-точка рассчитана по этому фото"
+    "slug": "psy",
+    "query": "PSY Gangnam Style singer",
+    "wiki": "Psy",
+    "commons": "Psy_2012.jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/63/Psy_2012.jpg/960px-Psy_2012.jpg",
+    "note": "Белые очки, образ эпохи Gangnam Style, CC BY-SA 2.0."
   },
   {
-    "slug": "evan-peters",
-    "query": "Evan Peters",
-    "wiki": "Evan_Peters",
-    "commons": "Evan_Peters_by_Gage_Skidmore_4.jpg",
-    "note": "zoom-точка рассчитана по этому фото"
+    "slug": "azamat-musagaliev-kid",
+    "query": "Азамат Мусагалиев в детстве",
+    "wiki": null,
+    "url": "https://uznayvse.ru/images/content/2023/7/7/azamat-musagaliyev-as-a-child_22.jpg",
+    "source": "https://uznayvse.ru/znamenitosti/biografiya-azamat-musagaliev.html",
+    "note": "Подпись в источнике: «Азамат Мусагалиев в детстве». 1920×1080, лицо крупно (x≈0.44, y≈0.55)."
   },
   {
-    "slug": "anya-taylor-joy",
-    "query": "Anya Taylor-Joy",
-    "wiki": "Anya_Taylor-Joy",
-    "commons": "Anya_Taylor-Joy_at_the_2025_Toronto_International_Film_Festival._07_(cropped).jpg",
-    "note": "zoom-точка рассчитана по этому фото"
+    "slug": "timur-batrutdinov-kid",
+    "query": "Тимур Батрутдинов в детстве",
+    "wiki": null,
+    "url": "https://uznayvse.ru/images/content/2023/5/29/timur-batrutdinov-as-a-child_81.jpg",
+    "source": "https://uznayvse.ru/znamenitosti/biografiya-timur-batrutdinov.html",
+    "note": "Подпись: «Тимур Батрутдинов в детстве». Ч/б портрет школьника, по бокам размытые поля — можно обрезать."
   },
   {
-    "slug": "paul-mescal",
-    "query": "Paul Mescal",
-    "wiki": "Paul_Mescal",
-    "commons": "Paul_Mescal_at_the_Toronto_International_Film_Festival_in_2025_2_(cropped_2).jpg",
-    "note": "zoom-точка рассчитана по этому фото"
+    "slug": "dmitry-pozov-kid",
+    "query": "Дмитрий Позов в детстве",
+    "wiki": null,
+    "url": "https://24smi.org/public/media/resize/800x-/2022/7/11/fui7ttwwyaasjcm.jpg",
+    "source": "https://24smi.org/celebrity/20677-dmitrii-pozov.html",
+    "note": "Подпись: «Дмитрий Позов в детстве / Фото: @argentum_anima» (его Instagram). Файл на деле WEBP — конвертировать в JPG."
   },
   {
-    "slug": "billie-eilish",
-    "query": "Billie Eilish",
-    "wiki": "Billie_Eilish"
+    "slug": "keanu-reeves",
+    "query": "Keanu Reeves",
+    "wiki": "Keanu_Reeves",
+    "note": "zoom-точка ПРЕДВАРИТЕЛЬНАЯ — пересчитать по выбранному файлу Commons.",
+    "commons": "Keanu_Reeves_2019_(cropped).jpg"
   },
   {
-    "slug": "lana-del-rey",
-    "query": "Lana Del Rey",
-    "wiki": "Lana_Del_Rey"
+    "slug": "timothee-chalamet",
+    "query": "Timothée Chalamet",
+    "wiki": "Timothée_Chalamet",
+    "note": "zoom-точка ПРЕДВАРИТЕЛЬНАЯ — пересчитать по выбранному файлу Commons.",
+    "commons": "Timothée_Chalamet_in_London_2025_(cropped).jpg"
   },
   {
-    "slug": "adele",
-    "query": "Adele",
-    "wiki": "Adele"
+    "slug": "margot-robbie",
+    "query": "Margot Robbie",
+    "wiki": "Margot_Robbie",
+    "note": "zoom-точка ПРЕДВАРИТЕЛЬНАЯ — пересчитать по выбранному файлу Commons.",
+    "commons": "Margot_Robbie_2019_by_Glenn_Francis_(cropped).jpg"
   },
   {
-    "slug": "chappell-roan",
-    "query": "Chappell Roan",
-    "wiki": "Chappell_Roan"
+    "slug": "millie-bobby-brown",
+    "query": "Millie Bobby Brown",
+    "wiki": "Millie_Bobby_Brown",
+    "note": "zoom-точка ПРЕДВАРИТЕЛЬНАЯ — пересчитать по выбранному файлу Commons.",
+    "commons": "Millie_Bobby_Brown_-_MBB_-_2_-_SFMLE_-_April_30,_2023_at_Stranger_Fan_Meet_Limited_Edition_People_Convention_(cropped).jpg"
   },
   {
-    "slug": "doechii",
-    "query": "Doechii",
-    "wiki": "Doechii"
+    "slug": "florence-pugh",
+    "query": "Florence Pugh",
+    "wiki": "Florence_Pugh",
+    "note": "zoom-точка ПРЕДВАРИТЕЛЬНАЯ — пересчитать по выбранному файлу Commons.",
+    "commons": "Florence_Pugh_in_2019_(cropped).jpg"
   },
   {
-    "slug": "labubu",
-    "query": "Labubu Pop Mart The Monsters toy",
-    "wiki": "Labubu",
-    "note": "В статье Википедии нет лид-картинки — брать по query."
+    "slug": "logo-mcdonalds",
+    "query": "McDonald's Golden Arches logo",
+    "wiki": "McDonald's",
+    "note": "PNG с прозрачностью — положить на белый фон. focus 0.5/0.5.",
+    "commons": "McDonald's_Golden_Arches.svg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/36/McDonald%27s_Golden_Arches.svg/960px-McDonald%27s_Golden_Arches.svg.png"
+  },
+  {
+    "slug": "logo-apple",
+    "query": "Apple logo black",
+    "wiki": "Apple_Inc.",
+    "note": "PNG с прозрачностью — на белый фон. focus 0.5/0.55.",
+    "commons": "Apple_logo_black.svg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fa/Apple_logo_black.svg/960px-Apple_logo_black.svg.png"
+  },
+  {
+    "slug": "logo-telegram",
+    "query": "Telegram logo",
+    "wiki": "Telegram_(software)",
+    "note": "PNG с прозрачностью — на белый фон. focus 0.5/0.5.",
+    "commons": "Telegram_2019_Logo.svg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/82/Telegram_logo.svg/960px-Telegram_logo.svg.png"
+  },
+  {
+    "slug": "logo-nike",
+    "query": "Nike swoosh logo",
+    "wiki": "Nike,_Inc.",
+    "note": "Только свуш, PNG с прозрачностью — на белый фон. focus 0.42/0.55.",
+    "commons": "Logo_NIKE.svg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a6/Logo_NIKE.svg/960px-Logo_NIKE.svg.png"
+  },
+  {
+    "slug": "logo-mitsubishi",
+    "query": "Mitsubishi three diamonds logo",
+    "wiki": "Mitsubishi",
+    "commons": "Mitsubishi_logo.svg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/Mitsubishi_logo.svg/960px-Mitsubishi_logo.svg.png",
+    "note": "PNG с прозрачностью — на белый фон. focus 0.5/0.55. Заменил Starbucks (его нет на Commons)."
+  },
+  {
+    "slug": "egor-kreed",
+    "query": "Егор Крид",
+    "wiki": "Egor_Kreed",
+    "commons": "Egor_Kreed_(2019).png",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/3/3e/Egor_Kreed_%282019%29.png",
+    "note": "CC BY 3.0, анфас."
+  },
+  {
+    "slug": "instasamka",
+    "query": "Instasamka",
+    "wiki": "Instasamka",
+    "commons": "Instasamka_на_VK_Fest_2023_в_СПб_(vertical)_(cropped).jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/Instasamka_%D0%BD%D0%B0_VK_Fest_2023_%D0%B2_%D0%A1%D0%9F%D0%B1_%28vertical%29_%28cropped%29.jpg/960px-Instasamka_%D0%BD%D0%B0_VK_Fest_2023_%D0%B2_%D0%A1%D0%9F%D0%B1_%28vertical%29_%28cropped%29.jpg",
+    "note": "CC BY-SA 4.0."
+  },
+  {
+    "slug": "moo-deng",
+    "query": "Moo Deng pygmy hippo Khao Kheow",
+    "wiki": "Moo_Deng",
+    "commons": "Moo_deng_หมูเด้ง_(2024-09-11)_-_img_02.jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d2/Moo_deng_%E0%B8%AB%E0%B8%A1%E0%B8%B9%E0%B9%80%E0%B8%94%E0%B9%89%E0%B8%87_%282024-09-11%29_-_img_02.jpg/1280px-Moo_deng_%E0%B8%AB%E0%B8%A1%E0%B8%B9%E0%B9%80%E0%B8%94%E0%B9%89%E0%B8%87_%282024-09-11%29_-_img_02.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Moo_deng_หมูเด้ง_(2024-09-11)_-_img_02.jpg",
+    "note": "CC BY 3.0, лид-фото статьи Википедии."
+  },
+  {
+    "slug": "chill-guy",
+    "query": "Chill guy meme Phillip Banks",
+    "wiki": "Chill_guy",
+    "source": "https://knowyourmeme.com/memes/just-a-chill-guy-my-new-character",
+    "url": "https://i.kym-cdn.com/entries/icons/original/000/051/201/chill-guy.jpg",
+    "note": "На картинке есть подпись «my new character…» — это не спойлер ответа целиком, но при желании обрезать до пса. Без текста: https://upload.wikimedia.org/wikipedia/en/c/c7/Chill_guy_original_artwork.jpg (маленькая)."
+  },
+  {
+    "slug": "pedro-raccoon",
+    "query": "Pedro raccoon dancing meme",
+    "wiki": null,
+    "source": "https://knowyourmeme.com/memes/raccoon-dancing-in-a-circle-pedro-pedro-pedro",
+    "url": "https://i.kym-cdn.com/entries/icons/original/000/049/273/cover11.jpg"
+  },
+  {
+    "slug": "jools-lebron",
+    "query": "Jools Lebron very demure",
+    "wiki": "Jools_Lebron",
+    "url": "https://i.kym-cdn.com/entries/icons/original/000/050/925/demure.jpg",
+    "source": "https://knowyourmeme.com/memes/very-demure-very-mindful",
+    "note": "Три кадра — обрезать по x 418–940 px, оставить только её лицо (средний кадр). На Commons фото нет."
   }
 ]

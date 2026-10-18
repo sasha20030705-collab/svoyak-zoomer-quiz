@@ -43,3 +43,29 @@ All are licensed under the [SIL Open Font License 1.1](https://openfontlicense.o
 | Unbounded (variable, used 700–900) | unbounded-cyrillic.woff2, unbounded-latin.woff2 | NaN (Unbounded Project Authors) | OFL 1.1 |
 | Manrope (variable, used 400–800) | manrope-cyrillic.woff2, manrope-latin.woff2 | Mikhail Sharanda (Manrope Project Authors) | OFL 1.1 |
 | Rubik Mono One (400) | rubik-mono-one-cyrillic.woff2, rubik-mono-one-latin.woff2 | Hubert & Fischer (Rubik Project Authors) | OFL 1.1 |
+
+# Additional images (quiz round 2)
+
+| slug | source | author | license |
+|---|---|---|---|
+| azamat-musagaliev-kid | [uznayvse.ru](https://uznayvse.ru/znamenitosti/biografiya-azamat-musagaliev.html) (childhood photo, cropped) | unknown / source site | used as editorial illustration, rights not cleared |
+| timur-batrutdinov-kid | [uznayvse.ru](https://uznayvse.ru/znamenitosti/biografiya-timur-batrutdinov.html) (cropped) | unknown / source site | used as editorial illustration, rights not cleared |
+| dmitry-pozov-kid | [24smi.org](https://24smi.org/celebrity/20677-dmitrii-pozov.html) | @argentum_anima (Instagram) | used as editorial illustration, rights not cleared |
+| keanu-reeves | [File:Keanu Reeves 2019 (cropped).jpg](https://commons.wikimedia.org/wiki/File:Keanu_Reeves_2019_(cropped).jpg) | Governo do Estado de São Paulo | CC BY 2.0 |
+| timothee-chalamet | [File:Timothée Chalamet in London 2025 (cropped).jpg](https://commons.wikimedia.org/wiki/File:Timoth%C3%A9e_Chalamet_in_London_2025_(cropped).jpg) | Amy Martin Photography | CC BY 4.0 |
+| margot-robbie | [File:Margot Robbie 2019 by Glenn Francis (cropped).jpg](https://commons.wikimedia.org/wiki/File:Margot_Robbie_2019_by_Glenn_Francis_(cropped).jpg) | Glenn Francis (Toglenn) | CC BY-SA 4.0 |
+| millie-bobby-brown | [File:Millie Bobby Brown - MBB - 2 - SFMLE - April 30, 2023 ... (cropped).jpg](https://commons.wikimedia.org/wiki/File:Millie_Bobby_Brown_-_MBB_-_2_-_SFMLE_-_April_30,_2023_at_Stranger_Fan_Meet_Limited_Edition_People_Convention_(cropped).jpg) | Laviru Koruwakankanamge | CC BY 4.0 |
+| florence-pugh | [File:Florence Pugh in 2019 (cropped).jpg](https://commons.wikimedia.org/wiki/File:Florence_Pugh_in_2019_(cropped).jpg) | greg2600 (Flickr) | CC BY-SA 2.0 |
+| logo-mcdonalds | [File:McDonald's Golden Arches.svg](https://commons.wikimedia.org/wiki/File:McDonald%27s_Golden_Arches.svg) (on red background) | McDonald's | Public domain (trademark applies) |
+| logo-apple | [File:Apple logo black.svg](https://commons.wikimedia.org/wiki/File:Apple_logo_black.svg) | Rob Janoff | Public domain (trademark applies) |
+| logo-telegram | [File:Telegram 2019 Logo.svg](https://commons.wikimedia.org/wiki/File:Telegram_2019_Logo.svg) | Telegram FZ LLC | Public domain (trademark applies) |
+| logo-nike | [File:Logo NIKE.svg](https://commons.wikimedia.org/wiki/File:Logo_NIKE.svg) | Carolyn Davidson, Nike | Public domain (trademark applies) |
+| logo-mitsubishi | [File:Mitsubishi logo.svg](https://commons.wikimedia.org/wiki/File:Mitsubishi_logo.svg) | Mitsubishi | Public domain (trademark applies) |
+| blackpink | [File:Blackpink Pink Carpet Event 1.jpg](https://commons.wikimedia.org/wiki/File:Blackpink_Pink_Carpet_Event_1.jpg) | TV10 (티비텐) | CC BY 3.0 |
+| psy | [File:Psy 2012.jpg](https://commons.wikimedia.org/wiki/File:Psy_2012.jpg) | see Commons page | CC BY-SA 2.0 |
+| moo-deng | [File:Moo deng หมูเด้ง (2024-09-11) - img 02.jpg](https://commons.wikimedia.org/wiki/File:Moo_deng_หมูเด้ง_(2024-09-11)_-_img_02.jpg) | MGR Online / เรื่องเด่นทั่วไทย | CC BY 3.0 |
+| egor-kreed | [File:Egor Kreed (2019).png](https://commons.wikimedia.org/wiki/File:Egor_Kreed_(2019).png) | T-killah | CC BY 3.0 |
+| instasamka | [File:Instasamka на VK Fest 2023 в СПб (vertical) (cropped).jpg](https://commons.wikimedia.org/wiki/File:Instasamka_на_VK_Fest_2023_в_СПб_(vertical)_(cropped).jpg) | Okras | CC BY-SA 4.0 |
+| chill-guy | [Know Your Meme](https://knowyourmeme.com/memes/just-a-chill-guy-my-new-character) (cropped to the character) | Phillip Banks | meme image, used as editorial illustration |
+| pedro-raccoon | [Know Your Meme](https://knowyourmeme.com/memes/raccoon-dancing-in-a-circle-pedro-pedro-pedro) (cropped square) | unknown | meme image, used as editorial illustration |
+| jools-lebron | [Know Your Meme](https://knowyourmeme.com/memes/very-demure-very-mindful) (middle frame cropped) | Jools Lebron (TikTok) | meme image, used as editorial illustration |

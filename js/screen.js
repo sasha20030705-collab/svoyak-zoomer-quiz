@@ -130,9 +130,8 @@
   function setTickers(type) {
     if (type === tickerType) return;
     tickerType = type;
-    const title = (quiz && quiz.title) || 'Своя игра';
     const build = (list) => { const one = list.map((x) => `${esc(x)}<i>✦</i>`).join(''); const block = one.repeat(4); return block + block; };
-    $('#ticker-top .track').innerHTML = build([title, ...(TICKERS[type] || TICKERS.splash)]);
+    $('#ticker-top .track').innerHTML = build([...(TICKERS[type] || TICKERS.splash)]);
     $('#ticker-bottom .track').innerHTML = build(['с днём рождения', '21.10.2026', ...(TICKERS[type] || TICKERS.splash).slice().reverse()]);
   }
 
@@ -192,7 +191,6 @@
   }
 
   function SplashView() {
-    const { main, sub } = titleParts();
     const el = h(`
       <div class="view full splash">
         <div class="stamp r-side" style="right:190px;top:120px">21<br>.10</div>
@@ -202,8 +200,6 @@
         <div class="float-stk emoji-font r-side" style="left:70px;top:380px;font-size:120px;filter:drop-shadow(8px 8px 0 #0A0A0A);animation-delay:-1s">🎂</div>
         <div class="float-stk emoji-font r-side" style="right:60px;top:560px;font-size:110px;filter:drop-shadow(8px 8px 0 #0A0A0A);animation-delay:-2.5s">💿</div>
         <div class="center">
-          <h1 class="mega wiggle" style="--mega:${megaSize(main, 320)}px">${letters(main, 200)}</h1>
-          ${sub ? `<div class="sub-row"><span class="tag lime" style="transform:rotate(2deg);font-size:40px">${esc(sub)}</span></div>` : ''}
           <div class="join"></div>
           <div class="hint"></div>
         </div>
@@ -257,7 +253,6 @@
         <div class="board-head">
           <span class="tag black round">${esc(R.name)}</span>
           <span class="tag white vibe">${esc(pick(['ваш ход, ребята', 'выбирайте, не тяните', 'ну что, кто смелый?', 'дорого = больно']))}</span>
-          <div class="logo" style="font-size:${Math.min(64, Math.round(1500 / Math.max(6, titleParts().main.length)))}px">${esc(titleParts().main)}</div>
         </div>
         <div class="board-grid" style="--cols:${cols}">${cells}</div>
       </div>`);

@@ -15,8 +15,9 @@
   const EMO_PICKS = ['🦄', '🔥', '👾', '🐸', '🍒', '💿', '🦋', '👽', '🪩', '🛸', '🐙', '⚡', '🎀', '🐱', '🦖', '👑'];
   // «1» — старт/пауза таймера (верхний ряд и цифровой блок, на любой раскладке)
   const TIMER_KEYS = ['Digit1', 'Numpad1'];
+  const CLIP_KEYS = ['Digit2', 'Numpad2']; // ▶/⏸ отрывка трека
   // эти клавиши нельзя назначить баззером команды
-  const RESERVED_KEYS = ['Digit1', 'Numpad1', 'Space', 'Enter', 'NumpadEnter', 'Tab', 'Escape', 'KeyF', 'Backspace'];
+  const RESERVED_KEYS = ['Digit1', 'Numpad1', 'Digit2', 'Numpad2', 'Space', 'Enter', 'NumpadEnter', 'Tab', 'Escape', 'KeyF', 'Backspace'];
   const TYPE_NAMES = { text: 'текст', image: 'картинка', fusion: 'слияние', zoom: 'зум', blur: 'размытие', emoji: 'эмодзи', audio: 'трек' };
 
   let quiz = null, source = '';
@@ -257,7 +258,7 @@
           <button class="btn" data-act="audioRestart" title="с начала отрывка">↺ ещё раз</button>
           <button class="btn" data-act="audioExtend" title="продлить отрывок на 5 секунд">+5 с</button>
         </div>
-        <p class="muted small" style="margin:8px 0 0">Отрывок ${Math.round(a.dur)} с${au.start ? ` с ${au.start}-й секунды` : ''}. Стартует сам, когда вопрос откроется; баззер ставит на паузу.</p>
+        <p class="muted small" style="margin:8px 0 0">Отрывок ${Math.round(a.dur)} с${au.start ? ` с ${au.start}-й секунды` : ''}. Запускаешь ты кнопкой ▶ (или клавишей «2»); баззер ставит на паузу.</p>
         <div class="mus-row" style="margin-top:8px">
           <div class="mus-name"><b>Свой отрывок</b><span class="muted small">${ci.own ? '🎧 ' + esc(ci.own.name) : 'нет — играет превью по ссылке'}</span></div>
           <label class="btn sm">${ci.own ? 'заменить' : 'загрузить свой отрывок'}<input type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg" data-clip-file="${esc(ci.ck)}" hidden></label>
@@ -859,6 +860,7 @@
     // если клавиатура одна на всех — команды могут жать и здесь
     const t = s.teams.find((x) => x.key && x.key === e.code);
     if (t) { e.preventDefault(); d({ type: 'buzz', teamId: t.id }); return; }
+    if (CLIP_KEYS.includes(e.code) && s.phase === 'question' && s.current && s.current.audio) { e.preventDefault(); d({ type: s.current.audio.playing ? 'audioPause' : 'audioPlay' }); }
     if (TIMER_KEYS.includes(e.code) && (s.phase === 'question' || s.phase === 'final')) { e.preventDefault(); d({ type: s.timer.running ? 'timerPause' : 'timerStart' }); }
     else if (e.code === 'Escape' && s.phase === 'question') d({ type: 'backToBoard' });
   });

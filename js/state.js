@@ -17,7 +17,7 @@
   const PALETTE = ['#C6FF00', '#FF2E93', '#2B4BFF', '#FF6A00', '#FFE600', '#00D1FF', '#A259FF', '#FFFFFF'];
   const DEFAULT_KEYS = ['KeyQ', 'KeyP', 'KeyZ', 'KeyM', 'KeyA', 'KeyL', 'KeyX', 'KeyN'];
   // служебные клавиши пульта — баззером их назначить нельзя («1» = таймер)
-  const RESERVED_KEYS = ['Digit1', 'Numpad1', 'Space', 'Enter', 'NumpadEnter', 'Tab', 'Escape', 'KeyF', 'Backspace'];
+  const RESERVED_KEYS = ['Digit1', 'Numpad1', 'Digit2', 'Numpad2', 'Space', 'Enter', 'NumpadEnter', 'Tab', 'Escape', 'KeyF', 'Backspace'];
   // код комнаты для телефонов: без путаемых символов (0/O, 1/I/L, 2/Z, 5/S, 6/G, 8/B)
   const ROOM_ALPHABET = 'ACDEFHJKMNPRTUVWXY3479';
   function makeKey(len = 20) {
@@ -316,8 +316,7 @@
         if (x.q.type === 'audio') {
           const au = (x.q.media && x.q.media.audio) || {};
           s.current.audio = { playing: false, pos: 0, at: now(), dur: Math.max(1, Number(au.dur) || 15), seq: 0, status: '' };
-          // обычный вопрос — отрывок стартует сам, когда ячейка долетит до экрана
-          if (!special) clipStart(s.current.audio, 0, CLIP_INTRO_MS);
+          // отрывок не стартует сам — его запускает ведущий кнопкой ▶ на пульте
         }
         s.timer = freshTimer(qDur(s));
         s.buzzer = { winner: null, at: 0 };
@@ -339,7 +338,7 @@
         if (s.current) {
           if (s.current.special === 'auction') s.current.bet = clampAuctionBet(s, s.current.bet, true);
           s.current.stage = 'question';
-          if (s.current.audio && !s.current.audio.seq) clipStart(s.current.audio, 0, 700); // заставка кота/аукциона уезжает
+          // отрывок после заставки кота/аукциона тоже запускает ведущий
           emit(s, { kind: 'showQuestion' });
         }
         break;

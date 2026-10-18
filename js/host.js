@@ -432,7 +432,7 @@
   let previewOn = false;
   function stopMusicPreview() { if (window.Music && previewOn) window.Music.stopPreview(true); previewOn = false; }
   function startMusicPreview() {
-    const m = Object.assign({ volume: 0.5, style: 'phonk' }, S.get().music || {});
+    const m = Object.assign({ volume: 0.5, style: 'show' }, S.get().music || {});
     if (!window.Music || !window.Music.preview) { toast('Музыкальный модуль не загрузился'); return; }
     previewOn = !!window.Music.preview({
       style: m.style, mode: previewMode, seconds: 8, volume: m.volume,
@@ -441,7 +441,7 @@
     render();
   }
   function renderMusic(s) {
-    const m = Object.assign({ enabled: true, volume: 0.5, sfx: 0.8, style: 'phonk', files: {} }, s.music || {});
+    const m = Object.assign({ enabled: true, volume: 0.5, sfx: 0.8, style: 'show', files: {} }, s.music || {});
     const styles = MUSIC_STYLES.map(([k, ico, name, sub]) => `<button class="mus-style ms-${k} ${m.style === k ? 'on' : ''}" data-act="musicStyle" data-style="${k}" aria-pressed="${m.style === k}">
         <span class="ms-ico">${ico}</span><b>${name}</b><small>${sub}</small></button>`).join('');
     const own = m.files[previewMode];

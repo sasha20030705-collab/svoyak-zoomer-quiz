@@ -628,7 +628,7 @@
     }
 
     /* ---------- состояние движка ---------- */
-    let style = 'phonk', mode = 'off', curKey = null, intensity = 0, remain = Infinity, ducked = false;
+    let style = 'show', mode = 'off', curKey = null, intensity = 0, remain = Infinity, ducked = false;
     const customBufs = {};
     const keyFor = (m) => (customBufs[m] ? 'custom:' + m : m === 'final' ? 'final' : style + ':' + m);
     function retarget(want) {
@@ -660,7 +660,7 @@
         retarget(mode === 'off' ? null : keyFor(mode));
       },
       setStyle(s) {
-        if (STYLES.indexOf(s) < 0) s = 'phonk';
+        if (STYLES.indexOf(s) < 0) s = 'show';
         if (s === style) return;
         style = s;
         if (mode !== 'off') retarget(keyFor(mode));
@@ -699,7 +699,7 @@
      ЭКРАН: один движок на общем контексте Sfx (через шину музыки и mute)
      ====================================================================== */
   let main = null;
-  let enabled = true, volume = 0.5, style = 'phonk';
+  let enabled = true, volume = 0.5, style = 'show';
   function init() {
     if (main) return true;
     if (!window.Sfx || !window.Sfx.context) return false;
@@ -726,7 +726,7 @@
   function configure(o) {
     if (typeof o.volume === 'number') volume = Math.max(0, Math.min(1, o.volume));
     if (typeof o.enabled === 'boolean') enabled = o.enabled;
-    if (typeof o.style === 'string') style = STYLES.indexOf(o.style) >= 0 ? o.style : 'phonk';
+    if (typeof o.style === 'string') style = STYLES.indexOf(o.style) >= 0 ? o.style : 'show';
     if (!main) return;
     main.setOut(enabled ? volume * OUT_SCALE : 0);
     main.setStyle(style);
@@ -795,7 +795,7 @@
     const octx = new OfflineAudioContext(2, Math.ceil(sr * sec), sr);
     const E = createEngine(octx, octx.destination, o.gain || 1);
     if (o.stinger) { // замер стингера отдельно
-      E.setStyle(o.style || 'phonk');
+      E.setStyle(o.style || 'show');
       E.stingerAt(o.stinger, 0.05);
       return octx.startRendering().then((buffer) => ({ buffer, seams: [], loopSec: 0 }));
     }

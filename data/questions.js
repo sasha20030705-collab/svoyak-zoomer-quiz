@@ -18,7 +18,7 @@ window.QUIZ = {
               type: "fusion",
               special: null,
               prompt: "Кто здесь смешался? Подсказка: оба рулили brat-летом.",
-              media: { images: ["assets/img/charli-xcx.jpg", "assets/img/addison-rae.jpg"] },
+              media: { images: ["assets/img/charli-xcx.jpg", "assets/img/addison-rae.jpg"], fused: "assets/fusion/charli-xcx-addison-rae.jpg" },
               answer: "Charli XCX + Addison Rae",
               note: "Ремикс на «Von dutch» с Аддисон вышел в марте 2024-го. Её дикий вопль в конце трека тут же разлетелся по TikTok."
             },
@@ -27,7 +27,7 @@ window.QUIZ = {
               type: "fusion",
               special: null,
               prompt: "Кто здесь смешался? Эти двое познакомились на съёмках супергеройской франшизы.",
-              media: { images: ["assets/img/zendaya.jpg", "assets/img/tom-holland.jpg"] },
+              media: { images: ["assets/img/zendaya.jpg", "assets/img/tom-holland.jpg"], fused: "assets/fusion/zendaya-tom-holland.jpg" },
               answer: "Зендея + Том Холланд",
               note: "В январе 2025-го Зендея пришла на «Золотой глобус» с кольцом на пальце, и все заговорили о помолвке. В «Одиссее» Нолана (2026) она играет богиню Афину, а он Телемаха."
             },
@@ -36,7 +36,7 @@ window.QUIZ = {
               type: "fusion",
               special: null,
               prompt: "Кто здесь смешался? Пара, которую весь интернет обсуждал в 2024-м.",
-              media: { images: ["assets/img/sabrina-carpenter.jpg", "assets/img/barry-keoghan.jpg"] },
+              media: { images: ["assets/img/sabrina-carpenter.jpg", "assets/img/barry-keoghan.jpg"], fused: "assets/fusion/sabrina-carpenter-barry-keoghan.jpg" },
               answer: "Sabrina Carpenter + Barry Keoghan",
               note: "Барри сыграл её парня-уголовника в клипе «Please Please Please» (июнь 2024). К концу года они расстались. Когда в феврале 2025-го вышел клип на ремикс с Долли Партон, фанаты заметили сзади связанного парня в том же наряде, что был на Барри."
             },
@@ -45,7 +45,7 @@ window.QUIZ = {
               type: "fusion",
               special: null,
               prompt: "Кто здесь смешался? Их ромком 2023 года называется «Кто угодно, кроме тебя».",
-              media: { images: ["assets/img/sydney-sweeney.jpg", "assets/img/glen-powell.jpg"] },
+              media: { images: ["assets/img/sydney-sweeney.jpg", "assets/img/glen-powell.jpg"], fused: "assets/fusion/sydney-sweeney-glen-powell.jpg" },
               answer: "Сидни Суини + Глен Пауэлл",
               note: "«Anyone but You» (2023) собрал больше $200 млн. Помогли слухи о романе звёзд: они сами охотно их подкармливали на промо."
             },
@@ -54,7 +54,7 @@ window.QUIZ = {
               type: "fusion",
               special: null,
               prompt: "Кто здесь смешался? Создатель и его создание из фильма Netflix 2025 года.",
-              media: { images: ["assets/img/oscar-isaac.jpg", "assets/img/jacob-elordi.jpg"] },
+              media: { images: ["assets/img/oscar-isaac.jpg", "assets/img/jacob-elordi.jpg"], fused: "assets/fusion/oscar-isaac-jacob-elordi.jpg" },
               answer: "Оскар Айзек + Джейкоб Элорди",
               note: "«Франкенштейн» Гильермо дель Торо: Айзек играет Виктора Франкенштейна, Элорди Существо. У Элорди первая в жизни номинация на «Оскар» (второй план), но статуэтку унёс Шон Пенн."
             }

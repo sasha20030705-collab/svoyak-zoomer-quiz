@@ -171,6 +171,10 @@
       if ('qid' in msg && !buzzLive(S.get(), msg.qid)) return;
       S.dispatch({ type: 'buzz', teamId: msg.teamId });
     }
+    else if (msg.t === 'audioStatus') { // плеер отрывка на удалённом экране: заблокирован / не грузится / доиграл
+      const cur = S.get().current;
+      if (cur && cur.audio && cur.key === msg.key && ['ok', 'blocked', 'error', 'ended'].includes(msg.status)) S.dispatch({ type: 'audioStatus', key: msg.key, status: msg.status });
+    }
     else if (msg.t === 'ping') host.send(cid, { t: 'pong', now: Date.now(), ts: msg.ts });
     else if (msg.t === 'leave') { screens.delete(cid); listeners.forEach((fn) => fn()); }
   }

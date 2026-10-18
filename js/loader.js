@@ -39,6 +39,7 @@
     if (type === 'text' && media.images && media.images.length) type = 'image';
     if (type === 'text' && media.emoji) type = 'emoji';
     return {
+      id: x.id || null,
       value: Number(x.value) || 0,
       type,
       special: x.special || null,

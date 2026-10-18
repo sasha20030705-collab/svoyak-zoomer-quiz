@@ -71,6 +71,31 @@
     return Math.max(0, t.remaining);
   }
 
+  /* ---------- отрывок трека (type: "audio") ----------
+     current.audio = { playing, pos, at, dur, seq, status }
+     pos — секунда отрывка (от media.audio.start) в момент at (часы пульта);
+     at может быть в будущем: автостарт после интро-анимации экрана.
+     seq растёт с каждой командой ведущего — плеер по нему делает seek. */
+  const CLIP_INTRO_MS = 2300;   // ячейка «отрывается» и летит на экран ≈ 2,1 с
+  function clipPos(a) {
+    if (!a) return 0;
+    if (!a.playing) return Math.max(0, Math.min(a.dur, a.pos));
+    return Math.max(0, Math.min(a.dur, a.pos + Math.max(0, syncedNow() - a.at) / 1000));
+  }
+  /** wait (скоро стартует) | play | pause | done */
+  function clipPhase(a) {
+    if (!a) return 'none';
+    const p = clipPos(a);
+    if (p >= a.dur - 0.02) return 'done';
+    if (!a.playing) return 'pause';
+    return syncedNow() < a.at ? 'wait' : 'play';
+  }
+  /** Ключ своего файла для вопроса: id из данных или координаты ячейки. */
+  function clipKey(r, c, q) {
+    const x = getQ(r, c, q);
+    return x && x.q.id ? 'id:' + x.q.id : 'cell:' + cellKey(r, c, q);
+  }
+
   /* ---------- данные квиза ---------- */
   let QUIZ = null;
   function getQ(r, c, q) {
@@ -128,6 +153,7 @@
       eventSeq: 0,
       room: null,                // код комнаты для телефонов-баззеров (показывается, вводится руками)
       netKey: null,              // секрет комнаты: топики MQTT, идёт в QR-ссылку
+      clips: {},                 // свои отрывки к audio-вопросам: clipKey → {name, at} (файлы — в IndexedDB)
       music: { enabled: true, volume: 0.5, sfx: 0.8, style: 'show', files: {} }, // style: phonk|show|chip; files: mode → {name, at} (сами файлы — в IndexedDB)
       net: { status: 'off', devices: 0, byTeam: {}, transport: '' }, // публикует пульт
     };
@@ -196,6 +222,22 @@
   function pauseTimer(s) {
     const t = s.timer;
     if (t.running) { t.remaining = Math.max(0, t.endsAt - now()); t.running = false; }
+  }
+
+  /** Отрывок — на паузу (баззер, ответ). */
+  function clipStop(s) {
+    const a = s.current && s.current.audio;
+    if (!a || !a.playing) return;
+    a.pos = clipPos(a);
+    a.playing = false;
+    a.at = now();
+    a.seq += 1;
+  }
+  function clipStart(a, pos, delay) {
+    a.pos = Math.max(0, pos);
+    a.playing = true;
+    a.at = now() + (delay || 0);
+    a.seq += 1;
   }
 
   function reduce(s, a) {
@@ -271,6 +313,12 @@
           wrong: [],        // кто уже ошибся
           winner: null,     // кто ответил верно
         };
+        if (x.q.type === 'audio') {
+          const au = (x.q.media && x.q.media.audio) || {};
+          s.current.audio = { playing: false, pos: 0, at: now(), dur: Math.max(1, Number(au.dur) || 15), seq: 0, status: '' };
+          // обычный вопрос — отрывок стартует сам, когда ячейка долетит до экрана
+          if (!special) clipStart(s.current.audio, 0, CLIP_INTRO_MS);
+        }
         s.timer = freshTimer(qDur(s));
         s.buzzer = { winner: null, at: 0 };
         emit(s, { kind: 'select', key: s.current.key, special });
@@ -291,6 +339,7 @@
         if (s.current) {
           if (s.current.special === 'auction') s.current.bet = clampAuctionBet(s, s.current.bet, true);
           s.current.stage = 'question';
+          if (s.current.audio && !s.current.audio.seq) clipStart(s.current.audio, 0, 700); // заставка кота/аукциона уезжает
           emit(s, { kind: 'showQuestion' });
         }
         break;
@@ -309,6 +358,7 @@
           cur.winner = t.id;
           s.used[cur.key] = { by: t.id };
           pauseTimer(s);
+          clipStop(s);
           emit(s, { kind: 'correct', teamId: t.id, delta: d });
         } else {
           t.score -= d;
@@ -326,6 +376,7 @@
         cur.stage = 'answer';
         if (!s.used[cur.key]) s.used[cur.key] = { by: null };
         pauseTimer(s);
+        clipStop(s);
         emit(s, { kind: 'reveal' });
         break;
       }
@@ -365,6 +416,46 @@
         s.answerSeconds = Math.max(5, Math.min(120, Number(a.seconds) || 15));
         break;
 
+      /* --- отрывок трека --- */
+      case 'audioPlay': {
+        const au = s.current && s.current.audio;
+        if (!au) break;
+        const p = clipPos(au);
+        clipStart(au, p >= au.dur - 0.05 || au.status === 'ended' ? 0 : p);
+        if (au.status === 'ended') au.status = '';
+        break;
+      }
+      case 'audioPause': clipStop(s); break;
+      case 'audioRestart': {
+        const au = s.current && s.current.audio;
+        if (!au) break;
+        clipStart(au, 0);
+        if (au.status === 'ended') au.status = '';
+        break;
+      }
+      case 'audioExtend': { // «+5 с»: отрывок длиннее; если уже доиграл — продолжаем с места остановки
+        const au = s.current && s.current.audio;
+        if (!au) break;
+        const p = clipPos(au);
+        const done = p >= au.dur - 0.05;
+        au.dur = Math.min(600, au.dur + (Number(a.sec) || 5));
+        if (au.status === 'ended') break; // файл кончился раньше — длиннее не станет
+        if (done || au.playing) clipStart(au, p); else au.seq += 1;
+        break;
+      }
+      case 'audioStatus': { // отчёт плеера: ok | blocked | error | ended
+        const cur = s.current;
+        const au = cur && cur.audio;
+        if (!au || (a.key && a.key !== cur.key)) break;
+        if (a.status === 'ended') { if (au.playing) clipStop(s); au.status = 'ended'; break; }
+        au.status = String(a.status || '');
+        break;
+      }
+      case 'clipFile': // свой отрывок загружен/удалён (file: {name, at} | null)
+        s.clips = Object.assign({}, s.clips || {});
+        if (a.file) s.clips[a.key] = a.file; else delete s.clips[a.key];
+        break;
+
       /* --- баззер --- */
       case 'buzz': {
         const t = team(s, a.teamId);
@@ -374,6 +465,7 @@
         if (s.phase !== 'question' || !cur || cur.stage !== 'question' || cur.special) break;
         if (s.buzzer.winner || cur.wrong.includes(t.id)) break;
         s.buzzer = { winner: t.id, at: now() };
+        clipStop(s); // отрывок замирает, пока команда отвечает
         // таймер вопроса — на паузу (запоминаем остаток), и сразу стартует отсчёт на ответ этой команды
         pauseTimer(s);
         const sec = s.answerSeconds || 15;
@@ -480,6 +572,7 @@
         fresh.timer = freshTimer(qDur(s));
         fresh.net = s.net;
         fresh.music = s.music || fresh.music;
+        fresh.clips = s.clips || {};
         fresh.rev = s.rev;
         fresh.eventSeq = s.eventSeq;
         emit(fresh, { kind: 'reset' });
@@ -563,5 +656,5 @@
   /** Счёт с настоящим минусом: −400, а не -400. */
   function fmtScore(n) { const v = Math.round(Number(n) || 0); return v < 0 ? '\u2212' + Math.abs(v) : String(v); }
 
-  window.QuizUtil = { now: syncedNow, placesOf, fmtScore, finalMaxBet, finalStarted, makeRoom, makeKey, RESERVED_KEYS, cellKey, keyLabel, textOn, timerRemaining, getQ, cellValue, currentValue, PALETTE, EMOJIS, DEFAULT_KEYS };
+  window.QuizUtil = { clipPos, clipPhase, clipKey, now: syncedNow, placesOf, fmtScore, finalMaxBet, finalStarted, makeRoom, makeKey, RESERVED_KEYS, cellKey, keyLabel, textOn, timerRemaining, getQ, cellValue, currentValue, PALETTE, EMOJIS, DEFAULT_KEYS };
 })();

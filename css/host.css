@@ -190,3 +190,12 @@ input:focus, select:focus, .btn:focus-visible { outline: 3px solid var(--blue); 
 .mus-style.ms-chip.on { background: var(--lime); }
 .mus-prev { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
 .mus-seg { display: flex; gap: 6px; }
+
+/* ---------- отрывок трека (audio-вопрос) ---------- */
+.clip-card { background: var(--paper); }
+.clip-card h2 { flex-wrap: wrap; }
+.clip-line { display: flex; align-items: center; gap: 10px; }
+.clip-bar { flex: 1; height: 18px; border: 3px solid var(--black); border-radius: 999px; background: var(--white); overflow: hidden; }
+.clip-bar i { display: block; height: 100%; width: 0; background: repeating-linear-gradient(-45deg, var(--lime) 0 10px, #a6d900 10px 20px); border-right: 3px solid var(--black); transition: width .15s linear; }
+.clip-time { font: 800 13px/1 var(--font-head); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.clip-warn { margin: 0 0 10px; padding: 10px 12px; border: 3px solid var(--black); border-radius: 10px; background: var(--yellow); box-shadow: 4px 4px 0 var(--black); font-weight: 800; transform: rotate(-.6deg); }

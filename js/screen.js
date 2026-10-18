@@ -272,10 +272,93 @@
   }
 
   /* ---------- медиа по типу вопроса ---------- */
-  function buildMedia(q) {
+  const fmtSec = (x) => { const v = Math.max(0, Math.floor(x)); return Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0'); };
+
+  /** Сцена «трек играет»: пластинка, эквалайзер, прогресс отрывка, тема крупно. */
+  function buildClipScene(q, cat) {
+    const m = q.media || {};
+    const showCover = !!(m.cover && m.hideCover === false);
+    const words = String(cat || '').split(/\s+/);
+    const longest = Math.max(1, ...words.map((w) => graphemes(w).length));
+    const fs = Math.round(Math.min(124, 960 / (longest * 0.86), 1900 / (Math.max(1, graphemes(String(cat || '')).length) * 0.86)));
+    const BARS = 28;
+    const el = h(`
+      <div class="clip-scene">
+        <div class="vinyl-wrap">
+          <div class="sleeve"><span>A-SIDE</span><b class="emoji-font">🎧</b></div>
+          <div class="vinyl"><div class="vlabel">${showCover ? `<img src="${esc(m.cover)}" alt="">` : '<span class="vq">?</span>'}</div></div>
+          <div class="arm"><i></i></div>
+        </div>
+        <div class="clip-side">
+          <div class="clip-theme mega" style="--mega:${fs}px">${esc(cat || '')}</div>
+          <canvas class="clip-eq" width="960" height="230"></canvas>
+          <div class="clip-prog"><i class="fill"></i><span class="ct">0:00</span></div>
+          <span class="tag black clip-st">сейчас заиграет…</span>
+        </div>
+      </div>`);
+    const cv = $('.clip-eq', el), g = cv.getContext('2d');
+    const fill = $('.fill', el), ct = $('.ct', el), st = $('.clip-st', el), vlabel = $('.vlabel', el);
+    const lv = new Array(BARS).fill(0.05);
+    const COLS = ['#C6FF00', '#FF2E93', '#FFFFFF', '#FF6A00', '#00D1FF'];
+    let sigSt = '', coverOn = showCover, lastT = 0;
+    function draw(levels, playing, t) {
+      const W = cv.width, H = cv.height, bw = W / BARS;
+      g.clearRect(0, 0, W, H);
+      for (let i = 0; i < BARS; i++) {
+        let v;
+        if (levels) v = levels[i];
+        else if (playing) { // синтетика: «бит» + бегущая волна, у баса больше
+          const beat = Math.pow(Math.max(0, Math.sin(t * 7.6)), 6);
+          v = 0.22 + 0.32 * Math.abs(Math.sin(t * 3.1 + i * 0.55)) * Math.abs(Math.sin(t * 1.7 + i * 0.23)) + beat * 0.45 * (1 - i / BARS) + 0.12 * Math.random();
+        } else v = 0.04;
+        lv[i] += (Math.min(1, v) - lv[i]) * (v > lv[i] ? 0.55 : 0.18);
+        const bh = 16 + lv[i] * (H - 30);
+        const x = i * bw + 5, y = H - bh - 6;
+        g.fillStyle = COLS[i % COLS.length];
+        g.fillRect(x, y, bw - 12, bh);
+        g.lineWidth = 5; g.strokeStyle = '#0A0A0A';
+        g.strokeRect(x, y, bw - 12, bh);
+      }
+    }
+    return {
+      el,
+      audioTick(s, revealed) {
+        const a = s.current && s.current.audio;
+        const ph = U.clipPhase(a);
+        const pos = U.clipPos(a);
+        el.classList.toggle('spin', ph === 'play');
+        el.classList.toggle('waiting', ph === 'wait');
+        fill.style.transform = `scaleX(${a ? Math.min(1, pos / a.dur).toFixed(4) : 0})`;
+        const tt = a ? `${fmtSec(pos)} / ${fmtSec(a.dur)}` : '';
+        if (ct.textContent !== tt) ct.textContent = tt;
+        const blocked = SC.player && SC.player.status === 'blocked' && SC.mode !== 'host';
+        const text = blocked ? 'кликни по экрану — включим звук'
+          : ph === 'wait' ? 'сейчас заиграет…'
+            : ph === 'play' ? (SC.mode === 'host' ? 'играет на пульте' : SC.mode === 'loading' ? 'грузим трек…' : 'играет')
+              : ph === 'done' ? (revealed ? 'вот он' : 'отрывок всё. ваши версии?')
+                : s.buzzer.winner && !revealed ? 'стоп! отвечают' : 'пауза';
+        if (text !== sigSt) { sigSt = text; st.textContent = text; st.className = 'tag clip-st ' + (blocked ? 'pink' : ph === 'play' ? 'lime' : 'black'); }
+        if (revealed && m.cover && !coverOn) { // ответ: обложка проявляется прямо на «яблоке» пластинки
+          coverOn = true;
+          vlabel.innerHTML = `<img src="${esc(m.cover)}" alt="">`;
+          guardImages(vlabel);
+        }
+        const now = performance.now();
+        if (now - lastT < 30) return; // ~30 кадров эквалайзеру хватит
+        lastT = now;
+        const live = ph === 'play' && SC.mode !== 'loading';
+        const levels = live && SC.player && SC.mode !== 'host' ? SC.player.levels(BARS) : null;
+        el.dataset.viz = levels ? 'analyser' : live ? 'synthetic' : 'idle';
+        draw(levels, live, now / 1000);
+      },
+    };
+  }
+
+  function buildMedia(q, cat) {
     const m = q.media || {};
     const imgs = m.images || [];
     switch (q.type) {
+      case 'audio': return buildClipScene(q, cat);
       case 'emoji': {
         const list = graphemes(m.emoji || '').filter((g) => g.trim());
         const n = list.length;
@@ -357,17 +440,22 @@
         const fig = (src, side, cap) => `
           <figure class="fuse-orig ${side}"><div class="ph"><img src="${esc(src || '')}" alt=""></div>
           ${cap ? `<figcaption class="tag ${side === 'left' ? 'black' : 'pink'}">${esc(cap)}</figcaption>` : ''}</figure>`;
-        const el = h(`
-          <div class="fusion">
-            ${fig(a, 'left', caps.length === 2 ? caps[0] : '')}
-            ${fig(b, 'right', caps.length === 2 ? caps[1] : '')}
-            <div class="fuse-frame">
-              <div class="fuse-layer ch-r">${comp}</div>
+        // глитч (RGB-сдвиг, тряска) и ИИ-стикер — только с media.glitch: true; иначе картинка стоит спокойно
+        const glitch = m.glitch === true;
+        const layers = glitch
+          ? `<div class="fuse-layer ch-r">${comp}</div>
               <div class="fuse-layer ch-c">${comp}</div>
               <div class="fuse-layer slice">${comp}</div>
-              <div class="scan"></div>
+              <div class="scan"></div>`
+          : `<div class="fuse-layer calm">${comp}</div>`;
+        const el = h(`
+          <div class="fusion ${glitch ? 'glitch' : 'calm'}">
+            ${fig(a, 'left', caps.length === 2 ? caps[0] : '')}
+            ${fig(b, 'right', caps.length === 2 ? caps[1] : '')}
+            <div class="fuse-frame${/\.png$/i.test(m.fused || '') ? ' cutout' : ''}">
+              ${layers}
             </div>
-            <span class="tag lime fuse-tag">нейросеть намутила</span>
+            ${glitch ? '<span class="tag lime fuse-tag">нейросеть намутила</span>' : ''}
           </div>`);
         return { el };
       }
@@ -385,7 +473,7 @@
    */
   function QuestionView(opts, getInfo) {
     const q = opts.q;
-    const media = buildMedia(q);
+    const media = buildMedia(q, opts.cat);
     const plen = (q.prompt || '').length;
     const el = h(`
       <div class="view question t-${media ? q.type : 'text'}">
@@ -412,6 +500,10 @@
         </div></div>
       </div>`);
     if (media) $('.q-media', el).appendChild(media.el);
+    // трек: при ответе обложка выезжает стикером рядом с ответом
+    if (q.type === 'audio' && q.media && q.media.cover) {
+      $('.q-answer', el).insertBefore(h(`<div class="ans-cover"><img src="${esc(q.media.cover)}" alt=""></div>`), $('.q-answer .lbl', el));
+    }
     guardImages(el);
     fitBadge($('.qv', el));
 
@@ -501,6 +593,7 @@
         let mp = started ? 1 - frac : 0;
         if (t.kind === 'answer' && t.saved) mp = 1 - t.saved.remaining / (t.saved.duration * 1000 || 1);
         if (media && media.progress) media.progress(Math.max(0, Math.min(1, mp)), lastStage === 'answer');
+        if (media && media.audioTick) media.audioTick(s, lastStage === 'answer');
       },
       onTimeUp() {
         timerEl.classList.remove('zero'); void timerEl.offsetWidth; timerEl.classList.add('zero');
@@ -979,10 +1072,89 @@
       mode = 'final';
       if (s.final.stage === 'question' && started) inten = 1 - rem / total;
     }
-    window.Music.update({ mode, intensity: inten, duck, remain });
+    // играет отрывок трека — своя музыка уходит почти в ноль и возвращается после
+    const ci = clipInfo(s);
+    const cph = ci ? U.clipPhase(ci.a) : 'none';
+    const hush = cph === 'play' || cph === 'wait' || !!(SC.player && !SC.player.paused);
+    window.Music.update({ mode, intensity: inten, duck, remain, hush });
     const now = performance.now();
     if (now - musicSyncAt > 1000) { musicSyncAt = now; syncMusicFiles(s); }
   }
+
+  /* ---------- отрывок трека (type: "audio") ----------
+     Играет <audio> экрана (колонки ТВ). Свой файл ведущего: экран в том же браузере
+     берёт его из IndexedDB; экран по сети молчит — файл играет на пульте. */
+  const SC = { player: null, mode: '', own: {}, sent: '', unlockEl: null };
+  function clipInfo(s) {
+    const cur = s.phase === 'question' ? s.current : null;
+    if (!cur || !cur.audio) return null;
+    const x = U.getQ(cur.r, cur.c, cur.q);
+    if (!x || x.q.type !== 'audio') return null;
+    const au = (x.q.media && x.q.media.audio) || {};
+    const ck = U.clipKey(cur.r, cur.c, cur.q);
+    return { cur, a: cur.audio, src: au.src || '', start: Number(au.start) || 0, ck, own: (s.clips || {})[ck] || null };
+  }
+  function loadOwnClip(ck, at) {
+    const prev = SC.own[ck];
+    if (prev && prev.url) URL.revokeObjectURL(prev.url);
+    const o = { at, loading: true, url: null };
+    SC.own[ck] = o;
+    if (!window.MediaDB) { o.loading = false; return; }
+    window.MediaDB.get('clip:' + ck).then((rec) => {
+      if (SC.own[ck] !== o) return;
+      o.loading = false;
+      if (rec && rec.data) o.url = URL.createObjectURL(new Blob([rec.data], { type: rec.type || 'audio/mpeg' }));
+    });
+  }
+  function clipStatus(st) {
+    const s = Store.get();
+    const ci = clipInfo(s);
+    if (!ci) return;
+    const sig = ci.cur.key + ':' + st;
+    if (sig === SC.sent) return;
+    SC.sent = sig;
+    if (st === 'ok' && !ci.a.status) return;   // и так всё хорошо — не гоняем действие
+    Store.dispatch({ type: 'audioStatus', key: ci.cur.key, status: st });
+  }
+  function clipUnlockShow(on) {
+    if (!SC.unlockEl) {
+      if (!on) return;
+      SC.unlockEl = h('<div id="clip-unlock"><b class="emoji-font">🔊</b><span>кликни по экрану,<br>чтобы включить звук</span></div>');
+      document.body.appendChild(SC.unlockEl);
+    }
+    SC.unlockEl.classList.toggle('on', !!on);
+  }
+  function clipSync(s) {
+    const ci = clipInfo(s);
+    if (!ci) { if (SC.player) SC.player.stop(); SC.mode = ''; clipUnlockShow(false); return; }
+    if (!SC.player) {
+      SC.player = window.ClipPlayer({
+        context: () => (window.Sfx.unlocked() ? window.Sfx.context() : null),
+        muted: () => window.Sfx.isMuted(),
+        onStatus: clipStatus,
+      });
+    }
+    let src = ci.src, cors = true, start = ci.start, mode = 'preview';
+    if (ci.own) {
+      if (netMode) mode = 'host';
+      else {
+        const o = SC.own[ci.ck];
+        if (!o || o.at !== ci.own.at) { loadOwnClip(ci.ck, ci.own.at); mode = 'loading'; }
+        else if (o.loading) mode = 'loading';
+        else if (o.url) { mode = 'own'; src = o.url; cors = false; start = 0; }
+        // файла в IndexedDB нет (другой браузер) — остаётся превью по ссылке
+      }
+    }
+    SC.mode = mode;
+    if (mode === 'host' || mode === 'loading') { SC.player.stop(); clipUnlockShow(false); return; }
+    SC.player.load(src, { cors });
+    SC.player.sync(ci.a, start, true);
+    clipUnlockShow(SC.player.status === 'blocked');
+  }
+  function clipKick() { if (SC.player) SC.player.kick(); }
+  // не только по кадрам: в фоновой вкладке requestAnimationFrame спит, а пауза/стоп по dur нужны всегда
+  setInterval(() => { if (quiz) clipSync(Store.get()); }, 200);
+  Store.subscribe((s) => { if (quiz) clipSync(s); }); // пауза по баззеру — сразу, без ожидания кадра
 
   /* Сторож fps: если экран тянет < 30 кадров (4K без GPU), включаем облегчённый режим. */
   let fpsT0 = 0, fpsN = 0, lowStrikes = 0;
@@ -1001,6 +1173,7 @@
     fpsWatch(now || performance.now());
     const s = Store.get();
     countdown(s);
+    clipSync(s);
     musicTick(s);
     if (view && view.tick && view.el.isConnected) view.tick(s);
     timerSounds(s);
@@ -1015,9 +1188,9 @@
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
   }
-  window.addEventListener('pointerdown', unlockAudio);
+  window.addEventListener('pointerdown', () => { unlockAudio(); clipKick(); });
   window.addEventListener('keydown', (e) => {
-    unlockAudio();
+    unlockAudio(); clipKick();
     if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
     const s = Store.get();
     const t = s.teams.find((x) => x.key && x.key === e.code);
@@ -1130,6 +1303,8 @@
     // клавиатурный баззер этого экрана — пульту по сети
     // qid — ключ открытого вопроса: пульт отсечёт запоздавшее нажатие, если вопрос уже сменился
     Store.useRemote((a) => {
+      // отчёт плеера отрывка (автоплей заблокирован, превью не грузится) — пульту
+      if (a && a.type === 'audioStatus') { client.send({ t: 'audioStatus', key: a.key, status: a.status }); return; }
       if (!a || a.type !== 'buzz') return;
       const st = Store.get();
       client.send({ t: 'kbBuzz', teamId: a.teamId, qid: st.phase === 'question' && st.current ? st.current.key : null });
@@ -1141,6 +1316,7 @@
   /* ---------- старт ---------- */
   /** Все картинки вопросов — в кэш заранее (первое открытие без задержки), по 4 параллельно. */
   const preloaded = [];
+  let preloadedClips = [];
   function preloadImages(q) {
     const list = [];
     const add = (m) => { if (!m) return; (m.images || []).forEach((x) => list.push(x)); if (m.fused) list.push(m.fused); };
@@ -1163,9 +1339,14 @@
     quiz = q;
     window.Store.setQuiz(q);
     setTimeout(() => preloadImages(q), 300);
+    // превью треков — заранее и по одному, чтобы не душить канал картинкам
+    const clips = [];
+    (q.rounds || []).forEach((R) => R.categories.forEach((c) => c.questions.forEach((x) => { if (x.type === 'audio' && x.media && x.media.audio) clips.push(x.media.audio.src); })));
+    if (q.final && q.final.type === 'audio' && q.final.media && q.final.media.audio) clips.push(q.final.media.audio.src);
+    if (clips.length && window.ClipPreload) setTimeout(() => { preloadedClips = window.ClipPreload(clips); }, 1500);
     if (netMode) startNet(); else startLocal();
     requestAnimationFrame(frame);
   });
 
-  window.__screen = { get view() { return view; }, confetti };
+  window.__screen = { get view() { return view; }, confetti, get clip() { return SC; }, get preloadedClips() { return preloadedClips; } };
 })();

@@ -27,7 +27,7 @@ window.QUIZ = {
               type: "fusion",
               special: null,
               prompt: "Кто здесь смешался? Эти двое познакомились на съёмках супергеройской франшизы.",
-              media: { images: ["assets/img/zendaya.jpg", "assets/img/tom-holland.jpg"], fused: "assets/fusion/zendaya-tom-holland.jpg" },
+              media: { images: ["assets/img/zendaya.jpg", "assets/img/tom-holland.jpg"], fused: "assets/fusion/zendaya-tom-holland.png" },
               answer: "Зендея + Том Холланд",
               note: "В январе 2025-го Зендея пришла на «Золотой глобус» с кольцом на пальце, и все заговорили о помолвке. В «Одиссее» Нолана (2026) она играет богиню Афину, а он Телемаха."
             },
@@ -36,7 +36,7 @@ window.QUIZ = {
               type: "fusion",
               special: null,
               prompt: "Кто здесь смешался? Пара, которую весь интернет обсуждал в 2024-м.",
-              media: { images: ["assets/img/sabrina-carpenter.jpg", "assets/img/barry-keoghan.jpg"], fused: "assets/fusion/sabrina-carpenter-barry-keoghan.jpg" },
+              media: { images: ["assets/img/sabrina-carpenter.jpg", "assets/img/barry-keoghan.jpg"], fused: "assets/fusion/sabrina-carpenter-barry-keoghan.png" },
               answer: "Sabrina Carpenter + Barry Keoghan",
               note: "Барри сыграл её парня-уголовника в клипе «Please Please Please» (июнь 2024). К концу года они расстались. Когда в феврале 2025-го вышел клип на ремикс с Долли Партон, фанаты заметили сзади связанного парня в том же наряде, что был на Барри."
             },
@@ -45,7 +45,7 @@ window.QUIZ = {
               type: "fusion",
               special: null,
               prompt: "Кто здесь смешался? Их ромком 2023 года называется «Кто угодно, кроме тебя».",
-              media: { images: ["assets/img/sydney-sweeney.jpg", "assets/img/glen-powell.jpg"], fused: "assets/fusion/sydney-sweeney-glen-powell.jpg" },
+              media: { images: ["assets/img/sydney-sweeney.jpg", "assets/img/glen-powell.jpg"], fused: "assets/fusion/sydney-sweeney-glen-powell.png" },
               answer: "Сидни Суини + Глен Пауэлл",
               note: "«Anyone but You» (2023) собрал больше $200 млн. Помогли слухи о романе звёзд: они сами охотно их подкармливали на промо."
             },
@@ -54,7 +54,7 @@ window.QUIZ = {
               type: "fusion",
               special: null,
               prompt: "Кто здесь смешался? Создатель и его создание из фильма Netflix 2025 года.",
-              media: { images: ["assets/img/oscar-isaac.jpg", "assets/img/jacob-elordi.jpg"], fused: "assets/fusion/oscar-isaac-jacob-elordi.jpg" },
+              media: { images: ["assets/img/oscar-isaac.jpg", "assets/img/jacob-elordi.jpg"], fused: "assets/fusion/oscar-isaac-jacob-elordi.jpg", glitch: true },
               answer: "Оскар Айзек + Джейкоб Элорди",
               note: "«Франкенштейн» Гильермо дель Торо: Айзек играет Виктора Франкенштейна, Элорди Существо. У Элорди первая в жизни номинация на «Оскар» (второй план), но статуэтку унёс Шон Пенн."
             }
@@ -329,54 +329,74 @@ window.QUIZ = {
       multiplier: 2,
       categories: [
         {
-          name: "Крупный план",
-          emoji: "🔍",
-          description: "Камера медленно отъезжает. Кто этот актёр?",
+          name: "Шазам в голове",
+          emoji: "🎧",
+          description: "Звучит кусок трека. Кто поёт и как называется? Шазам не спасёт.",
           questions: [
             {
               value: 200,
-              type: "zoom",
+              type: "audio",
               special: null,
-              prompt: "Кто это?",
-              media: { images: ["assets/img/keanu-reeves.jpg"], zoom: { x: 0.425, y: 0.376, scale: 6 } },
-              answer: "Киану Ривз",
-              note: "Нео из «Матрицы» и Джон Уик. Интернет давно назвал его самым добрым человеком Голливуда: он ездит в метро, а ещё, по слухам, делился гонорарами с командой «Матрицы»."
+              prompt: "Кто поёт и как называется трек?",
+              media: {
+                audio: { src: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/87/84/ae/8784ae2b-8e39-0053-23ad-940bf2f69d87/mzaf_16356168226426243495.plus.aac.p.m4a", start: 0, dur: 18 },
+                cover: "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/a8/69/90/a869906a-dd48-b772-785b-871459b36df2/10UMGIM03438.rgb.jpg/600x600bb.jpg",
+                hideCover: true
+              },
+              answer: "Stromae — «Alors on danse» (засчитываем исполнителя ИЛИ название)",
+              note: "Бельгиец Stromae (по паспорту Поль ван Авер) выпустил его в 2009-м, и трек разлетелся по всей Европе."
             },
             {
               value: 400,
-              type: "zoom",
+              type: "audio",
               special: null,
-              prompt: "Кто это?",
-              media: { images: ["assets/img/timothee-chalamet.jpg"], zoom: { x: 0.432, y: 0.449, scale: 6 } },
-              answer: "Тимоти Шаламе",
-              note: "Пол Атрейдес в «Дюне», Вилли Вонка и Боб Дилан в «Никому не известном». В «Марти Великолепном» (2025) играет амбициозного игрока в настольный теннис."
+              prompt: "Свежак 2026 года. Кто поёт (их двое) и как называется?",
+              media: {
+                audio: { src: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/8e/71/c0/8e71c053-2ea2-4b17-ec93-ce515b1728ae/mzaf_18307262092983093504.plus.aac.p.m4a", start: 9, dur: 16 },
+                cover: "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/1a/c3/dc/1ac3dc86-3154-9b9b-f26b-d82ae4093d68/cover.jpg/600x600bb.jpg",
+                hideCover: true
+              },
+              answer: "Toxi$ & Дора — «ЗНАК» (засчитываем, если назван хотя бы один исполнитель И название)",
+              note: "Трек про гороскопы и совместимость по знакам зодиака."
             },
             {
               value: 600,
-              type: "zoom",
+              type: "audio",
               special: null,
-              prompt: "Кто это?",
-              media: { images: ["assets/img/margot-robbie.jpg"], zoom: { x: 0.430, y: 0.258, scale: 6 } },
-              answer: "Марго Робби",
-              note: "Барби, Харли Квинн и героиня «Волка с Уолл-стрит». В 2026-м сыграла Кэтрин в «Грозовом перевале» вместе с Джейкобом Элорди."
+              prompt: "Чей это трек и как он называется? Тут тоже дуэт.",
+              media: {
+                audio: { src: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/f6/95/d0/f695d0ee-e2b7-892d-6a26-9cae97799695/mzaf_13969039394760206211.plus.aac.p.m4a", start: 0, dur: 16 },
+                cover: "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/7b/aa/ae/7baaae4e-eee5-959c-b313-034603db692b/0.jpg/600x600bb.jpg",
+                hideCover: true
+              },
+              answer: "Mary Gu & OG Buda — «толстовка» (нужны оба исполнителя ИЛИ один исполнитель + название)",
+              note: "Хит 2024 года, который крутили на каждой тусовке."
             },
             {
               value: 800,
-              type: "zoom",
+              type: "audio",
               special: null,
-              prompt: "Кто это?",
-              media: { images: ["assets/img/millie-bobby-brown.jpg"], zoom: { x: 0.410, y: 0.314, scale: 6 } },
-              answer: "Милли Бобби Браун",
-              note: "Одиннадцать из «Очень странных дел» и Энола Холмс. Ради роли Одиннадцать в 11 лет побрилась налысо."
+              prompt: "Кто читает и как называется трек?",
+              media: {
+                audio: { src: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview116/v4/4e/93/81/4e9381ee-bd61-8457-50d8-41d2185ead6c/mzaf_7201767133762995568.plus.aac.p.m4a", start: 3, dur: 15 },
+                cover: "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/eb/d0/ab/ebd0abe6-9d20-314b-78a8-cda335fae6f3/cover.jpg/600x600bb.jpg",
+                hideCover: true
+              },
+              answer: "Yanix — «Да или нет» (нужны исполнитель И название)",
+              note: "Трек 2019 года."
             },
             {
               value: 1000,
-              type: "zoom",
+              type: "audio",
               special: null,
-              prompt: "Кто это?",
-              media: { images: ["assets/img/florence-pugh.jpg"], zoom: { x: 0.247, y: 0.333, scale: 6 } },
-              answer: "Флоренс Пью",
-              note: "Эми в «Маленьких женщинах», Елена Белова в «Чёрной вдове» и «Громовержцах*» (2025), принцесса Ирулан в «Дюне 2». Обожает готовить и снимает кулинарные видео «Cooking with Flo»."
+              prompt: "Это дуэт. Назовите ОБА ника и название трека.",
+              media: {
+                audio: { src: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/6f/96/d1/6f96d1af-73cd-660e-9aa6-0a84ebb7de29/mzaf_3517199821827240377.plus.aac.p.m4a", start: 14, dur: 10 },
+                cover: "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/e0/66/57/e0665781-47da-1c74-7a99-22b6cd6fee4f/190296669637.jpg/600x600bb.jpg",
+                hideCover: true
+              },
+              answer: "HammAli & Navai — «Птичка» (нужны оба исполнителя И название; без одного ника — не засчитываем)",
+              note: "Дуэт собрался в 2018-м и сразу выстрелил с «Пустите меня на танцпол», а «Птичка» (2019) закрепила успех."
             }
           ]
         },

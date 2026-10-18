@@ -17,7 +17,7 @@
   const TIMER_KEYS = ['Digit1', 'Numpad1'];
   // эти клавиши нельзя назначить баззером команды
   const RESERVED_KEYS = ['Digit1', 'Numpad1', 'Space', 'Enter', 'NumpadEnter', 'Tab', 'Escape', 'KeyF', 'Backspace'];
-  const TYPE_NAMES = { text: 'текст', image: 'картинка', fusion: 'слияние', zoom: 'зум', blur: 'размытие', emoji: 'эмодзи' };
+  const TYPE_NAMES = { text: 'текст', image: 'картинка', fusion: 'слияние', zoom: 'зум', blur: 'размытие', emoji: 'эмодзи', audio: 'трек' };
 
   let quiz = null, source = '';
   let capture = null;            // id команды, для которой ловим клавишу
@@ -120,6 +120,7 @@
   function mediaPreview(q) {
     const m = q.media || {};
     if (q.type === 'emoji' && m.emoji) return `<div class="emoji-big emoji-font">${esc(m.emoji)}</div>`;
+    if (q.type === 'audio') return m.cover ? `<div class="thumbs"><img src="${esc(m.cover)}" alt="" data-src="${esc(m.cover)}"></div>` : '';
     const imgs = (m.fused ? [m.fused] : []).concat(m.images || []);
     if (!imgs.length) return '';
     return `<div class="thumbs">${imgs.map((src) => `<img src="${esc(src)}" alt="" data-src="${esc(src)}">`).join('')}</div>`;
@@ -180,6 +181,8 @@
         </section>`;
     }
 
+    if (x.q.type === 'audio' && cur.audio) html += clipCard(s, cur, x.q);
+
     if (cur.stage === 'question') {
       const bz = s.buzzer.winner && teamById(s, s.buzzer.winner);
       const order = s.teams.slice().sort((a, b) => (b.id === s.buzzer.winner) - (a.id === s.buzzer.winner) || (b.id === cur.owner) - (a.id === cur.owner));
@@ -214,6 +217,102 @@
     }
     return html;
   }
+
+  /* ---------- отрывок трека (type: "audio") ----------
+     Играет экран гостей (колонки ТВ). Свой файл: экран в этом браузере берёт его
+     из IndexedDB, иначе (экран по сети / экрана нет) — играет здесь, на пульте. */
+  function localScreenAlive() {
+    try { return Date.now() - Number(localStorage.getItem('svoyak:screen-local') || 0) < 6000; } catch (e) { return false; }
+  }
+  function clipInfo(s) {
+    const cur = s.phase === 'question' ? s.current : null;
+    if (!cur || !cur.audio) return null;
+    const x = U.getQ(cur.r, cur.c, cur.q);
+    if (!x || x.q.type !== 'audio') return null;
+    const ck = U.clipKey(cur.r, cur.c, cur.q);
+    const own = (s.clips || {})[ck] || null;
+    return { cur, a: cur.audio, ck, own, hostPlays: !!own && !localScreenAlive() };
+  }
+  function clipWhere(ci) {
+    if (ci.hostPlays) return '<span class="pill pink">📍 играет здесь, на пульте</span>';
+    return ci.own ? '<span class="pill lime">🔊 свой файл · на экране гостей</span>' : '<span class="pill lime">🔊 превью · на экране гостей</span>';
+  }
+  function clipCard(s, cur, q) {
+    const ci = clipInfo(s);
+    const a = cur.audio;
+    const au = (q.media && q.media.audio) || {};
+    const plaque = a.status === 'error' && !ci.own
+      ? '<div class="clip-warn">⚠️ Превью не загрузилось — загрузи свой файл или играй с телефона.</div>'
+      : a.status === 'blocked' && !ci.hostPlays
+        ? '<div class="clip-warn">🔇 Экран не пускает звук: кликни по экрану гостей, чтобы включить звук.</div>'
+        : a.status === 'blocked' ? '<div class="clip-warn">🔇 Браузер пульта не пустил звук — нажми ▶.</div>' : '';
+    return `
+      <section class="card clip-card">
+        <h2>🎧 Трек <span id="clip-where">${clipWhere(ci)}</span></h2>
+        ${plaque}
+        <div class="clip-line"><div class="clip-bar"><i id="clip-fill"></i></div><span id="clip-time" class="clip-time"></span></div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn lime" data-act="audioPlay" id="clip-play">▶ играть</button>
+          <button class="btn pink" data-act="audioPause" id="clip-pause" hidden>⏸ пауза</button>
+          <button class="btn" data-act="audioRestart" title="с начала отрывка">↺ ещё раз</button>
+          <button class="btn" data-act="audioExtend" title="продлить отрывок на 5 секунд">+5 с</button>
+        </div>
+        <p class="muted small" style="margin:8px 0 0">Отрывок ${Math.round(a.dur)} с${au.start ? ` с ${au.start}-й секунды` : ''}. Стартует сам, когда вопрос откроется; баззер ставит на паузу.</p>
+        <div class="mus-row" style="margin-top:8px">
+          <div class="mus-name"><b>Свой отрывок</b><span class="muted small">${ci.own ? '🎧 ' + esc(ci.own.name) : 'нет — играет превью по ссылке'}</span></div>
+          <label class="btn sm">${ci.own ? 'заменить' : 'загрузить свой отрывок'}<input type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg" data-clip-file="${esc(ci.ck)}" hidden></label>
+          ${ci.own ? `<button class="btn sm" data-act="clipDel" data-key="${esc(ci.ck)}">✕</button>` : ''}
+        </div>
+      </section>`;
+  }
+  // плеер пульта — только для своего файла, когда экран гостей не в этом браузере
+  let hostClip = null;
+  const hostOwn = {}; // clipKey → {at, loading, url}
+  function hostClipSync() {
+    const s = S.get();
+    const ci = quiz && clipInfo(s);
+    if (!ci || !ci.hostPlays || !window.ClipPlayer) { if (hostClip) hostClip.stop(); return ci; }
+    if (!hostClip) {
+      hostClip = window.ClipPlayer({
+        onStatus(st) {
+          const c = clipInfo(S.get());
+          if (!c || !c.hostPlays) return;
+          if (st === 'ok' && !c.a.status) return;
+          if (st !== c.a.status) d({ type: 'audioStatus', key: c.cur.key, status: st });
+        },
+      });
+    }
+    let o = hostOwn[ci.ck];
+    if (!o || o.at !== ci.own.at) {
+      if (o && o.url) URL.revokeObjectURL(o.url);
+      o = hostOwn[ci.ck] = { at: ci.own.at, loading: true, url: null };
+      const mine = o;
+      window.MediaDB.get('clip:' + ci.ck).then((rec) => {
+        mine.loading = false;
+        if (rec && rec.data) mine.url = URL.createObjectURL(new Blob([rec.data], { type: rec.type || 'audio/mpeg' }));
+      });
+    }
+    if (!o.url) { hostClip.stop(); return ci; }
+    hostClip.load(o.url, { cors: false });
+    hostClip.sync(ci.a, 0, true);
+    return ci;
+  }
+  function tickClip() {
+    const ci = hostClipSync();
+    const fill = document.getElementById('clip-fill');
+    if (!fill || !ci) return;
+    const a = ci.a, ph = U.clipPhase(a), pos = U.clipPos(a);
+    fill.style.width = (Math.min(1, pos / a.dur) * 100).toFixed(1) + '%';
+    const f = (x) => { const v = Math.floor(x); return Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0'); };
+    const label = { wait: 'стартует…', play: 'играет', pause: 'пауза', done: 'доиграл', none: '' }[ph];
+    document.getElementById('clip-time').textContent = `${f(pos)} / ${f(a.dur)} · ${label}`;
+    const playing = ph === 'play' || ph === 'wait';
+    document.getElementById('clip-play').hidden = playing;
+    document.getElementById('clip-pause').hidden = !playing;
+    const w = document.getElementById('clip-where');
+    if (w) { const h = clipWhere(ci); if (w.innerHTML !== h) w.innerHTML = h; }
+  }
+  setInterval(tickClip, 150);
 
   function renderFinal(s) {
     const f = quiz.final;
@@ -622,6 +721,17 @@
       case 'judge': d({ type: 'judge', teamId: id, correct: b.dataset.ok === '1' }); break;
       case 'reveal': d({ type: 'reveal' }); break;
       case 'board': d({ type: 'backToBoard' }); break;
+      case 'audioPlay': case 'audioPause': case 'audioRestart': case 'audioExtend':
+        d({ type: a });
+        // свой файл играет на пульте — play() прямо в жесте клика (автоплей Safari)
+        if (hostClip && a !== 'audioPause') { hostClipSync(); hostClip.kick(); }
+        tickClip();
+        break;
+      case 'clipDel': {
+        const key = b.dataset.key;
+        window.MediaDB.del('clip:' + key).then(() => d({ type: 'clipFile', key, file: null }));
+        break;
+      }
       case 'timerToggle': d({ type: s.timer.running ? 'timerPause' : 'timerStart' }); break;
       case 'timerReset': d({ type: 'timerReset' }); break;
       case 'buzzReset': d({ type: 'buzzReset' }); break;
@@ -701,6 +811,17 @@
     const el = e.target;
     if (el.dataset && el.dataset.musicRange) {
       d({ type: 'musicSet', patch: { [el.dataset.musicRange]: Math.max(0, Math.min(1, +el.value / 100)) } });
+    } else if (el.dataset && el.dataset.clipFile) {
+      const key = el.dataset.clipFile;
+      const f = el.files && el.files[0];
+      if (!f) return;
+      if (f.size > 25 * 1024 * 1024) { toast('Файл больше 25 МБ — нужен короткий отрывок'); return; }
+      toast('Сохраняем «' + f.name + '»…');
+      f.arrayBuffer().then((data) => window.MediaDB.put('clip:' + key, { name: f.name, type: f.type, data })).then((ok) => {
+        if (!ok) { toast('Не получилось сохранить файл (IndexedDB недоступна)'); return; }
+        d({ type: 'clipFile', key, file: { name: f.name, at: Date.now() } });
+        toast(localScreenAlive() ? 'Готово: свой отрывок играет на экране гостей' : 'Готово: свой отрывок играет здесь, на пульте');
+      });
     } else if (el.dataset && el.dataset.musicFile) {
       const key = el.dataset.musicFile;
       const f = el.files && el.files[0];

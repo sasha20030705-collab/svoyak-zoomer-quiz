@@ -297,6 +297,9 @@ body.idle { cursor: none; }
   transition: transform 1s var(--ease-pop);
   animation: fuse-in .8s var(--ease-pop) backwards;
 }
+/* прозрачный PNG «только лицо»: без рамки и фона — лицо-стикер прямо на фоне экрана */
+.fuse-frame.cutout { background: none; border: 0; outline: 0; box-shadow: none; border-radius: 0; overflow: visible; }
+.fuse-frame.cutout .fuse-layer img { object-fit: contain; transform: scale(1.2); }
 @keyframes fuse-in { from { opacity: 0; transform: translate(-50%, -50%) scale(.3) rotate(-30deg); } }
 .fuse-layer { position: absolute; inset: 0; }
 .fuse-layer img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; }
@@ -491,11 +494,15 @@ body.idle { cursor: none; }
 #sound-hint { position: fixed; left: 50%; top: 70px; transform: translateX(-50%) rotate(-1deg); z-index: 200; padding: 10px 18px; border-radius: 10px;
   background: var(--white); border: 3px solid var(--black); box-shadow: 4px 4px 0 var(--black); font: 800 15px var(--font-body); transition: opacity .3s; white-space: nowrap; }
 #sound-hint.gone { opacity: 0; pointer-events: none; }
+/* слияние без media.glitch: спокойное «дыхание» картинки, без дёрганий */
+.fuse-layer.calm img { animation: fuse-breathe 6s ease-in-out infinite; transform-origin: 50% 35%; }
+@keyframes fuse-breathe { 50% { transform: scale(1.035); } }
+.revealed .fuse-layer.calm img { animation: none; }
 #boot-error { position: fixed; inset: auto 20px 20px 20px; z-index: 300; background: var(--white); border: var(--line); padding: 16px; font: 700 16px var(--font-body); }
 
 @media (prefers-reduced-motion: reduce) {
   #grain, .shape, #bg::before, .ticker .track, .cell, .letters .ch, .wiggle .ch, .emoji-row .emo, .stamp, .float-stk,
-  .special .stripes, #buzz .stripes, .money, .fuse-layer, .pcol .ava, .pcol .crown, .team .crown, .press-hint { animation: none !important; }
+  .special .stripes, #buzz .stripes, .money, .fuse-layer, .fuse-layer.calm img, .fuse-frame, .vinyl, .pcol .ava, .pcol .crown, .team .crown, .press-hint { animation: none !important; }
 }
 /* слабая графика (4K без аппаратного ускорения: screen.js меряет fps и ставит .lowfx) —
    фон и зерно замирают, ячейки табло не «дышат»; всё остальное (вылеты, конфетти, таймер) остаётся */
@@ -553,3 +560,46 @@ body.idle { cursor: none; }
 /* локальный экран: пульт давно не подавал признаков жизни — тихий значок, не перекрывает игру */
 #host-quiet { position: fixed; left: 12px; bottom: 12px; z-index: 240; padding: 4px 10px; border-radius: 8px; background: rgba(10, 10, 10, .55); color: #fff; font: 700 12px var(--font-head); opacity: .7; pointer-events: none; }
 #host-quiet[hidden] { display: none; }
+
+/* ---------- трек (type: "audio"): пластинка + эквалайзер ---------- */
+.question.t-audio .q-media { align-items: stretch; }
+.clip-scene { width: 100%; max-width: 1760px; height: 100%; max-height: 640px; display: flex; align-items: center; gap: 70px; padding: 10px 30px; }
+.vinyl-wrap { position: relative; height: 100%; max-height: 600px; aspect-ratio: 1 / 1; flex: 0 0 auto; animation: slap .6s .2s var(--ease-pop) both; --r: -3deg; }
+.sleeve { position: absolute; inset: 4% 22% 4% -6%; background: var(--pink); border: var(--line); border-radius: 18px; box-shadow: var(--hard); transform: rotate(-5deg); overflow: hidden; }
+.sleeve::before { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(45deg, transparent 0 26px, rgba(10,10,10,.14) 26px 52px); }
+.sleeve span { position: absolute; left: 22px; top: 18px; font: 400 40px/1 var(--font-display); color: var(--white); -webkit-text-stroke: 3px var(--black); paint-order: stroke fill; }
+.sleeve b { position: absolute; left: 22px; bottom: 16px; font-size: 64px; filter: drop-shadow(4px 4px 0 var(--black)); }
+.vinyl { position: absolute; inset: 6% 0 6% 18%; border-radius: 50%; border: var(--line); box-shadow: var(--hard);
+  background: radial-gradient(circle, transparent 0 31%, #1b1b1b 31.5% 33%, #0a0a0a 33.5% 40%, #222 40.5% 41%, #0a0a0a 41.5% 52%, #1f1f1f 52.5% 53%, #0a0a0a 53.5% 64%, #262626 64.5% 65%, #0a0a0a 65.5% 100%);
+  animation: vinyl-spin 1.8s linear infinite; animation-play-state: paused; }
+.vinyl::after { content: ""; position: absolute; inset: 6%; border-radius: 50%; background: conic-gradient(from 20deg, transparent 0 40deg, rgba(255,255,255,.16) 52deg, transparent 70deg 200deg, rgba(255,255,255,.12) 220deg, transparent 240deg); }
+.spin .vinyl { animation-play-state: running; }
+.vlabel { position: absolute; inset: 31%; border-radius: 50%; background: var(--lime); border: 4px solid var(--black); display: grid; place-items: center; overflow: hidden; z-index: 1; }
+.vlabel::after { content: ""; position: absolute; width: 9%; height: 9%; border-radius: 50%; background: var(--black); }
+.vlabel img { width: 100%; height: 100%; object-fit: cover; animation: slap .6s var(--ease-pop) both; }
+.vq { font: 400 120px/1 var(--font-display); color: var(--black); transform: rotate(-12deg); }
+@keyframes vinyl-spin { to { transform: rotate(360deg); } }
+.arm { position: absolute; right: -4%; top: 2%; width: 30%; height: 62%; transform-origin: 80% 8%; transform: rotate(-26deg); transition: transform .8s var(--ease-pop); z-index: 2; pointer-events: none; }
+.arm::before { content: ""; position: absolute; right: 12%; top: 0; width: 46px; height: 46px; border-radius: 50%; background: var(--white); border: var(--line); box-shadow: var(--hard-sm); }
+.arm i { position: absolute; right: calc(12% + 17px); top: 30px; width: 14px; height: 88%; background: var(--white); border: 4px solid var(--black); border-radius: 8px; transform-origin: top center; transform: rotate(18deg); }
+.arm i::after { content: ""; position: absolute; left: -16px; bottom: -14px; width: 38px; height: 48px; background: var(--orange); border: 4px solid var(--black); border-radius: 6px; }
+.spin .arm, .waiting .arm { transform: rotate(0deg); }
+.clip-side { flex: 1; min-width: 0; max-height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 22px; }
+.clip-theme { --mega: 110px; line-height: .95; text-shadow: 7px 7px 0 var(--black), 13px 13px 0 var(--pink); -webkit-text-stroke: 5px var(--black); max-width: 100%; overflow-wrap: anywhere; }
+.clip-eq { width: 100%; max-width: 960px; height: 230px; flex: 0 1 auto; min-height: 60px; display: block; filter: drop-shadow(6px 6px 0 rgba(10,10,10,.35)); }
+.clip-prog { flex: 0 0 auto; position: relative; width: 100%; max-width: 960px; height: 46px; border: var(--line); border-radius: 999px; background: var(--white); box-shadow: var(--hard-sm); overflow: hidden; }
+.clip-prog .fill { position: absolute; inset: 0; transform-origin: 0 50%; transform: scaleX(0); background: repeating-linear-gradient(-45deg, var(--lime) 0 18px, #a6d900 18px 36px); border-right: 4px solid var(--black); }
+.clip-prog .ct { position: absolute; right: 18px; top: 50%; transform: translateY(-50%); font: 400 22px/1 var(--font-mono); color: var(--black); font-variant-numeric: tabular-nums; }
+.clip-st { transform: rotate(2deg); }
+/* ответ: обложка выезжает стикером рядом с ответом */
+.ans-cover { flex: 0 0 auto; width: 150px; height: 150px; margin: -6px 0; border: var(--line); border-radius: 12px; box-shadow: var(--hard-sm); overflow: hidden; background: var(--white); position: relative;
+  transform: translateX(-140%) rotate(-30deg); opacity: 0; transition: transform .7s .35s var(--ease-pop), opacity .2s .35s; }
+.ans-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.revealed .ans-cover { transform: rotate(-6deg); opacity: 1; }
+/* звук заблокирован браузером: просим клик */
+#clip-unlock { position: fixed; left: 50%; bottom: 13vh; z-index: 90; display: flex; align-items: center; gap: 18px; padding: 18px 30px; pointer-events: none;
+  background: var(--yellow); color: var(--black); border: 5px solid var(--black); border-radius: 18px; box-shadow: 10px 10px 0 var(--black);
+  font: 800 clamp(18px, 2.2vw, 40px)/1.1 var(--font-head); text-transform: uppercase; transform: translate(-50%, 40px) rotate(-2deg) scale(.8); opacity: 0; transition: transform .45s var(--ease-pop), opacity .2s; }
+#clip-unlock b { font-size: 1.6em; }
+#clip-unlock.on { opacity: 1; transform: translate(-50%, 0) rotate(-2deg); }
+.lowfx .vinyl { animation: none; }

@@ -30,7 +30,7 @@
   }
 
   window.MediaDB = {
-    /** key: 'board' | 'question' | 'final'; value: { name, type, data: ArrayBuffer } */
+    /** key: 'board' | 'question' | 'final' | 'clip:<clipKey>' (свой отрывок к audio-вопросу); value: { name, type, data: ArrayBuffer } */
     put: (key, value) => run('readwrite', (st) => st.put(value, key)).then(() => true).catch((e) => { console.warn('MediaDB.put', e); return false; }),
     get: (key) => run('readonly', (st) => st.get(key)).catch((e) => { console.warn('MediaDB.get', e); return null; }),
     del: (key) => run('readwrite', (st) => st.delete(key)).then(() => true).catch(() => false),

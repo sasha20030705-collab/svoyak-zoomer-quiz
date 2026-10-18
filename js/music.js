@@ -12,6 +12,7 @@
        intensity: 0..1 — прогресс таймера (нагнетание в «вопросе»)
        remain: секунд до конца таймера (Infinity — таймер не идёт): дробь на 5…1
        duck: true — баззер «ПЕРВЫЕ!», музыка проваливается до ~15%
+       hush: true — играет отрывок трека (audio-вопрос): музыка уходит почти в ноль
    Music.stinger('correct' | 'wrong')
    Music.configure({ enabled, volume, style })
    Music.setCustom(mode, ArrayBuffer | null)  — свой файл вместо синтеза (приоритет)
@@ -667,13 +668,15 @@
       },
       get style() { return style; },
       get mode() { return mode; },
+      /** d: false | true (баззер, ~15%) | 'hush' (играет отрывок трека — почти тишина) */
       setDuck(d) {
         if (d === ducked) return;
         ducked = d;
         const now = ctx.currentTime;
         duckG.gain.cancelScheduledValues(now);
-        duckG.gain.setTargetAtTime(d ? 0.15 : 1, now, d ? 0.03 : 0.35);
+        duckG.gain.setTargetAtTime(d === 'hush' ? 0.02 : d ? 0.15 : 1, now, d === 'hush' ? 0.12 : d ? 0.03 : 0.35);
       },
+      get duck() { return ducked; },
       setOut(v) { out.gain.setTargetAtTime(v, ctx.currentTime, 0.2); },
       stinger(kind) { stingerAt(style, kind, ctx.currentTime + 0.02); },
       stingerAt(kind, t) { stingerAt(style, kind, t); },
@@ -717,7 +720,7 @@
     if (!init()) return;
     const want = enabled ? (o.mode || 'off') : 'off';
     main.setMode(want, o.intensity, o.remain);
-    main.setDuck(!!o.duck);
+    main.setDuck(o.hush ? 'hush' : !!o.duck);
   }
   function stinger(kind) {
     if (!init() || !enabled || main.ctx.state !== 'running') return;
@@ -814,6 +817,8 @@
     STYLES,
     get previewing() { return !!pv; },
     get mode() { return main ? main.mode : 'off'; },
+    /** false | true | 'hush' — текущий дакинг экрана (для отладки и тестов) */
+    get duck() { return main ? main.duck : false; },
     get style() { return style; },
     /** для отладки: какие треки сейчас звучат на экране */
     tracks: () => (main ? Object.keys(main.tracks) : []),

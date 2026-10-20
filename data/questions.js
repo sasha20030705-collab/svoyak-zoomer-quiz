@@ -363,14 +363,14 @@ window.QUIZ = {
               value: 600,
               type: "audio",
               special: null,
-              prompt: "Чей это трек и как он называется? Тут тоже дуэт.",
+              prompt: "Чей это трек и как он называется?",
               media: {
-                audio: { src: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/f6/95/d0/f695d0ee-e2b7-892d-6a26-9cae97799695/mzaf_13969039394760206211.plus.aac.p.m4a", start: 0, dur: 16 },
-                cover: "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/7b/aa/ae/7baaae4e-eee5-959c-b313-034603db692b/0.jpg/600x600bb.jpg",
+                audio: { src: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/52/61/6f/52616fad-48e1-a117-3948-6c38fb3a1fab/mzaf_9574998313104933286.plus.aac.p.m4a", start: 7, dur: 18 },
+                cover: "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/cc/53/5b/cc535bca-c53a-8607-dd16-6f9fa3d4ae55/3616401130894.jpg/600x600bb.jpg",
                 hideCover: true
               },
-              answer: "Mary Gu & OG Buda — «толстовка» (нужны оба исполнителя ИЛИ один исполнитель + название)",
-              note: "Хит 2024 года, который крутили на каждой тусовке."
+              answer: "JONY — «Комета» (нужны исполнитель И название)",
+              note: "«Комета» (2019) стала прорывом JONY и до сих пор не вылезает из караоке."
             },
             {
               value: 800,
@@ -389,14 +389,14 @@ window.QUIZ = {
               value: 1000,
               type: "audio",
               special: null,
-              prompt: "Это дуэт. Назовите ОБА ника и название трека.",
+              prompt: "Самый короткий отрывок. Кто поёт и как называется трек?",
               media: {
-                audio: { src: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/6f/96/d1/6f96d1af-73cd-660e-9aa6-0a84ebb7de29/mzaf_3517199821827240377.plus.aac.p.m4a", start: 14, dur: 10 },
-                cover: "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/e0/66/57/e0665781-47da-1c74-7a99-22b6cd6fee4f/190296669637.jpg/600x600bb.jpg",
+                audio: { src: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/49/db/4b/49db4b9a-0586-01b4-9503-35c3c07b45fe/mzaf_16348026034856673183.plus.aac.p.m4a", start: 16, dur: 10 },
+                cover: "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/50/46/ac/5046ac40-d83b-7682-d85e-01fa40a7bc69/cover.jpg/600x600bb.jpg",
                 hideCover: true
               },
-              answer: "HammAli & Navai — «Птичка» (нужны оба исполнителя И название; без одного ника — не засчитываем)",
-              note: "Дуэт собрался в 2018-м и сразу выстрелил с «Пустите меня на танцпол», а «Птичка» (2019) закрепила успех."
+              answer: "Zivert — «Life» (нужны исполнитель И название)",
+              note: "Сингл 2018 года, после которого Zivert стала одной из главных поп-певиц страны."
             }
           ]
         },

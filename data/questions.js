@@ -365,12 +365,12 @@ window.QUIZ = {
               special: null,
               prompt: "Чей это трек и как он называется?",
               media: {
-                audio: { src: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/52/61/6f/52616fad-48e1-a117-3948-6c38fb3a1fab/mzaf_9574998313104933286.plus.aac.p.m4a", start: 7, dur: 18 },
-                cover: "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/cc/53/5b/cc535bca-c53a-8607-dd16-6f9fa3d4ae55/3616401130894.jpg/600x600bb.jpg",
+                audio: { src: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/8d/f9/97/8df99783-dfa2-d839-12d4-3ef0347701b3/mzaf_7629191323839660110.plus.aac.p.m4a", start: 0, dur: 16 },
+                cover: "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/86/20/21/862021e1-9d17-7484-8236-8b72eb446755/0.jpg/600x600bb.jpg",
                 hideCover: true
               },
-              answer: "JONY — «Комета» (нужны исполнитель И название)",
-              note: "«Комета» (2019) стала прорывом JONY и до сих пор не вылезает из караоке."
+              answer: "NILETTO — «Любимка» (нужны исполнитель И название)",
+              note: "Тот самый трек, под который в 2020-м танцевал весь TikTok."
             },
             {
               value: 800,
@@ -391,12 +391,12 @@ window.QUIZ = {
               special: null,
               prompt: "Самый короткий отрывок. Кто поёт и как называется трек?",
               media: {
-                audio: { src: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/49/db/4b/49db4b9a-0586-01b4-9503-35c3c07b45fe/mzaf_16348026034856673183.plus.aac.p.m4a", start: 16, dur: 10 },
-                cover: "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/50/46/ac/5046ac40-d83b-7682-d85e-01fa40a7bc69/cover.jpg/600x600bb.jpg",
+                audio: { src: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/c7/3e/53/c73e53c1-021e-ca90-0cc5-d7883dd11b45/mzaf_18382729877648664933.plus.aac.p.m4a", start: 15, dur: 8 },
+                cover: "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/9e/9b/11/9e9b1128-7c00-23b9-d48f-da889b54fdb3/cover.jpg/600x600bb.jpg",
                 hideCover: true
               },
-              answer: "Zivert — «Life» (нужны исполнитель И название)",
-              note: "Сингл 2018 года, после которого Zivert стала одной из главных поп-певиц страны."
+              answer: "Dabro — «Юность» (нужны исполнитель И название)",
+              note: "Dabro — это братья Иван и Михаил Засидкевичи из Казани. «Юность» (2020) стала их главным хитом."
             }
           ]
         },

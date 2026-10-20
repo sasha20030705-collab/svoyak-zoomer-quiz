@@ -124,7 +124,7 @@
     question: ['жми, если знаешь', 'думаем', 'тик-так', 'без гугла', 'шёпотом не подсказываем'],
     finalintro: ['финалочка', 'ставки сделаны?', 'всё или ничего'],
     finalq: ['финалочка', 'пишите ответ', 'без подглядываний'],
-    winner: ['корона достаётся', 'gg', 'аура +1000', 'с днём рождения'],
+    winner: ['корона достаётся', 'gg', 'аура +1000', 'с днём рождения, Полина', 'самый крутой день в году'],
   };
   let tickerType = '';
   function setTickers(type) {
@@ -132,7 +132,7 @@
     tickerType = type;
     const build = (list) => { const one = list.map((x) => `${esc(x)}<i>✦</i>`).join(''); const block = one.repeat(4); return block + block; };
     $('#ticker-top .track').innerHTML = build([...(TICKERS[type] || TICKERS.splash)]);
-    $('#ticker-bottom .track').innerHTML = build(['с днём рождения', '21.10.2026', ...(TICKERS[type] || TICKERS.splash).slice().reverse()]);
+    $('#ticker-bottom .track').innerHTML = build(['с днём рождения, Полина', 'самый крутой день в году', '21.10.2026', ...(TICKERS[type] || TICKERS.splash).slice().reverse()]);
   }
 
   /** Большой штамп поверх экрана: «МИМО», «ВСЁ, ВРЕМЯ»… */

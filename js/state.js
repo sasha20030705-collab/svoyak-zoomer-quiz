@@ -240,6 +240,17 @@
     a.seq += 1;
   }
 
+  /* ---------- шоу победителя ----------
+     winnerShow = { at, seq, music }: at — момент старта хореографии и трека (часы пульта,
+     после шторки перехода), seq растёт с каждым «повторить». music — как current.audio. */
+  const WINNER_INTRO_MS = 900;
+  function winnerShowStart(s, delay) {
+    const prev = s.winnerShow || {};
+    const pm = prev.music || {};
+    const at = now() + delay;
+    s.winnerShow = { at, seq: (prev.seq || 0) + 1, music: { playing: true, pos: 0, at, dur: 600, seq: (pm.seq || 0) + 1, status: '' } };
+  }
+
   function reduce(s, a) {
     switch (a.type) {
       /* --- команды --- */
@@ -557,10 +568,29 @@
         s.phase = 'final';
         break;
       case 'showWinner':
+        if (s.phase !== 'winner') winnerShowStart(s, WINNER_INTRO_MS); // повторное нажатие «🏆» шоу не перезапускает
         s.phase = 'winner';
         pauseTimer(s);
         emit(s, { kind: 'winner' });
         break;
+      case 'winnerReplay': // «▶ повторить шоу победителя»: хореография и трек — с начала
+        if (s.phase === 'winner') winnerShowStart(s, 400);
+        break;
+      case 'winnerMusic': { // ▶/⏸ трека победителя
+        const m = s.winnerShow && s.winnerShow.music;
+        if (!m) break;
+        const on = m.playing && m.status !== 'ended' && m.status !== 'error' && clipPos(m) < m.dur - 0.05;
+        if (on) { m.pos = clipPos(m); m.playing = false; m.at = now(); m.seq += 1; }
+        else { clipStart(m, m.status === 'ended' || clipPos(m) >= m.dur - 0.05 ? 0 : clipPos(m)); m.status = ''; } // после ошибки — новая попытка
+        break;
+      }
+      case 'winnerStatus': { // отчёт плеера трека победителя: ok | blocked | error | ended
+        const m = s.winnerShow && s.winnerShow.music;
+        if (!m || (a.seq !== undefined && a.seq !== m.seq)) break;
+        if (a.status === 'ended') { m.playing = false; m.pos = 0; m.at = now(); m.status = 'ended'; break; }
+        m.status = String(a.status || '');
+        break;
+      }
 
       case 'resetGame': {
         const teams = s.teams.map((t) => Object.assign({}, t, { score: 0 }));

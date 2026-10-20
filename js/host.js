@@ -373,8 +373,107 @@
         <div class="row" style="margin-top:14px">
           <button class="btn" data-act="backToFinal">← Назад к финалу</button>
         </div>
+      </section>
+      ${winnerMusicCard(s)}`;
+  }
+
+  /* ---------- трек победителя: WE ON GO II (превью) или свой файл из слота «Победитель» ---------- */
+  function winnerMusicInfo(s) {
+    const m = s.phase === 'winner' && s.winnerShow && s.winnerShow.music;
+    if (!m) return null;
+    const own = (s.music && s.music.files && s.music.files.winner) || null;
+    return { m, own, hostPlays: !!own && !localScreenAlive() };
+  }
+  function winnerWhere(wi) {
+    if (wi.hostPlays) return '<span class="pill pink">📍 свой файл · играет здесь, на пульте</span>';
+    return wi.own ? '<span class="pill lime">🔊 свой файл · на экране гостей</span>' : '<span class="pill lime">🔊 превью · на экране гостей</span>';
+  }
+  function winnerMusicCard(s) {
+    const wi = winnerMusicInfo(s);
+    if (!wi) return '';
+    const st = wi.m.status;
+    const plaque = st === 'error' && !wi.own
+      ? '<div class="clip-warn">⚠️ Превью не загрузилось — играет финальная музыка. Загрузи свой файл в «Музыка → Победитель».</div>'
+      : st === 'error' ? '<div class="clip-warn">⚠️ Свой файл не играет — проверь формат (mp3/m4a).</div>'
+        : st === 'blocked' && !wi.hostPlays ? '<div class="clip-warn">🔇 Экран не пускает звук: кликни по экрану гостей.</div>'
+          : st === 'blocked' ? '<div class="clip-warn">🔇 Браузер пульта не пустил звук — нажми ▶.</div>' : '';
+    return `
+      <section class="card">
+        <h2>🎤 Шоу победителя <span id="win-where">${winnerWhere(wi)}</span></h2>
+        ${plaque}
+        <p class="muted small" style="margin:0 0 10px">BIA &amp; A$AP Ferg — «WE ON GO II» (feat. Denzel Curry)${wi.own ? ' · 🎧 ' + esc(wi.own.name) : ''}. <span id="win-mus-state"></span></p>
+        <div class="row">
+          <button class="btn ${winnerOn(wi.m) ? 'pink' : 'lime'}" data-act="winnerMusic" id="win-mus-btn">${winnerOn(wi.m) ? '⏸ пауза' : '▶ музыка'}</button>
+          <button class="btn" data-act="winnerReplay">▶ повторить шоу победителя</button>
+        </div>
+        <p class="muted small" style="margin:8px 0 0">Шоу и трек стартуют сами. ▶/⏸ (или клавиша «2») — только музыка; «повторить» — прыжки и трек с начала.</p>
       </section>`;
   }
+  // плеер пульта — только для своего файла, когда экран гостей не в этом браузере
+  let hostWin = null;
+  let hostWinOwn = null; // {at, loading, url}
+  let hostWinSent = '', hostWinErrSeq = null;
+  function hostWinnerSync() {
+    const s = S.get();
+    const wi = quiz && winnerMusicInfo(s);
+    if (!wi || !wi.hostPlays || !window.ClipPlayer) { if (hostWin) hostWin.stop(); return wi; }
+    if (!hostWin) {
+      hostWin = window.ClipPlayer({
+        onStatus(st) {
+          const c = winnerMusicInfo(S.get());
+          if (!c || !c.hostPlays) return;
+          const sig = c.m.seq + ':' + st;
+          if (sig === hostWinSent) return;
+          hostWinSent = sig;
+          if (st === 'ok' && !c.m.status) return;
+          d({ type: 'winnerStatus', seq: c.m.seq, status: st });
+        },
+      });
+    }
+    let o = hostWinOwn;
+    if (!o || o.at !== wi.own.at) {
+      if (o && o.url) URL.revokeObjectURL(o.url);
+      o = hostWinOwn = { at: wi.own.at, loading: true, url: null };
+      const mine = o;
+      window.MediaDB.get('winner').then((rec) => {
+        mine.loading = false;
+        if (rec && rec.data) mine.url = URL.createObjectURL(new Blob([rec.data], { type: rec.type || 'audio/mpeg' }));
+      });
+    }
+    if (!o.url) { hostWin.stop(); return wi; }
+    hostWin.load(o.url, { cors: false });
+    // файл не играет — не долбим play(); новая команда (▶/повтор) — ещё одна попытка
+    if (hostWin.status === 'error') {
+      if (hostWinErrSeq !== wi.m.seq) { hostWinErrSeq = wi.m.seq; hostWin.unload(); hostWin.load(o.url, { cors: false }); }
+      else { hostWin.stop(); return wi; }
+    }
+    hostWin.sync(wi.m, 0, true);
+    return wi;
+  }
+  /** Свой файл играет на пульте — play() прямо в жесте клика/клавиши (автоплей Safari), только если теперь «играет». */
+  function hostWinnerKick() {
+    const wi = hostWinnerSync();
+    if (hostWin && wi && wi.hostPlays && wi.m.playing) hostWin.kick();
+    tickWinner();
+  }
+  function winnerOn(m) { const ph = U.clipPhase(m); return (ph === 'play' || ph === 'wait') && m.status !== 'ended' && m.status !== 'error'; }
+  function tickWinner() {
+    const wi = hostWinnerSync();
+    const btn = document.getElementById('win-mus-btn');
+    if (!btn || !wi) return;
+    const m = wi.m, ph = U.clipPhase(m);
+    const on = winnerOn(m);
+    const label = m.status === 'ended' ? 'доиграла' : m.status === 'error' ? 'не загрузилась' : { wait: 'стартует…', play: 'играет', pause: 'пауза', done: 'доиграла', none: '' }[ph];
+    const txt = on ? '⏸ пауза' : '▶ музыка';
+    if (btn.textContent !== txt) { btn.textContent = txt; btn.className = 'btn ' + (on ? 'pink' : 'lime'); }
+    const f = (x) => { const v = Math.floor(x); return Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0'); };
+    const stEl = document.getElementById('win-mus-state');
+    const t = on || ph === 'pause' ? f(U.clipPos(m)) + ' · ' : '';
+    if (stEl && stEl.textContent !== t + label) stEl.textContent = t + label;
+    const w = document.getElementById('win-where');
+    if (w) { const h = winnerWhere(wi); if (w.innerHTML !== h) w.innerHTML = h; }
+  }
+  setInterval(tickWinner, 200);
 
   function renderSide(s) {
     let html = '';
@@ -522,7 +621,8 @@
   }
 
   /* ---------- музыка ---------- */
-  const MUSIC_SLOTS = [['board', 'Табло'], ['question', 'Вопрос'], ['final', 'Финал']];
+  const MUSIC_SLOTS = [['board', 'Табло'], ['question', 'Вопрос'], ['final', 'Финал'], ['winner', 'Победитель']];
+  const MUSIC_DEFAULT = { winner: 'по умолчанию: WE ON GO II (превью 30 с)' };
   const MUSIC_STYLES = [
     ['phonk', '🏎️', 'Фонк', 'дрифт-808'],
     ['show', '🎺', 'Шоу', 'как на ТВ'],
@@ -548,7 +648,7 @@
     const slots = MUSIC_SLOTS.map(([k, label]) => {
       const f = m.files[k];
       return `<div class="mus-row">
-        <div class="mus-name"><b>${label}</b><span class="muted small">${f ? '🎧 ' + esc(f.name) : 'встроенная (синтез)'}</span></div>
+        <div class="mus-name"><b>${label}</b><span class="muted small"${!f && MUSIC_DEFAULT[k] ? ' style="white-space:normal"' : ''}>${f ? '🎧 ' + esc(f.name) : MUSIC_DEFAULT[k] || 'встроенная (синтез)'}</span></div>
         <label class="btn sm">свой файл<input type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg" data-music-file="${k}" hidden></label>
         ${f ? `<button class="btn sm" data-act="musicDel" data-key="${k}">✕</button>` : ''}
       </div>`;
@@ -746,6 +846,10 @@
       case 'finalJudge': d({ type: 'finalJudge', teamId: id, correct: b.dataset.ok === '1' }); break;
       case 'showWinner': d({ type: 'showWinner' }); break;
       case 'backToFinal': d({ type: 'backToFinal' }); break;
+      case 'winnerMusic': case 'winnerReplay':
+        d({ type: a });
+        hostWinnerKick();
+        break;
       case 'screenMute': d({ type: 'musicSet', patch: { muted: !(s.music && s.music.muted) } }); break;
       case 'musicStyle': {
         const st = b.dataset.style;
@@ -861,6 +965,7 @@
     const t = s.teams.find((x) => x.key && x.key === e.code);
     if (t) { e.preventDefault(); d({ type: 'buzz', teamId: t.id }); return; }
     if (CLIP_KEYS.includes(e.code) && s.phase === 'question' && s.current && s.current.audio) { e.preventDefault(); d({ type: s.current.audio.playing ? 'audioPause' : 'audioPlay' }); }
+    if (CLIP_KEYS.includes(e.code) && s.phase === 'winner' && s.winnerShow) { e.preventDefault(); d({ type: 'winnerMusic' }); hostWinnerKick(); }
     if (TIMER_KEYS.includes(e.code) && (s.phase === 'question' || s.phase === 'final')) { e.preventDefault(); d({ type: s.timer.running ? 'timerPause' : 'timerStart' }); }
     else if (e.code === 'Escape' && s.phase === 'question') d({ type: 'backToBoard' });
   });

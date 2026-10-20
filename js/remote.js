@@ -175,6 +175,10 @@
       const cur = S.get().current;
       if (cur && cur.audio && cur.key === msg.key && ['ok', 'blocked', 'error', 'ended'].includes(msg.status)) S.dispatch({ type: 'audioStatus', key: msg.key, status: msg.status });
     }
+    else if (msg.t === 'winnerStatus') { // трек победителя на удалённом экране: заблокирован / не грузится / доиграл
+      const ws = S.get().winnerShow;
+      if (S.get().phase === 'winner' && ws && ws.music && ['ok', 'blocked', 'error', 'ended'].includes(msg.status)) S.dispatch({ type: 'winnerStatus', seq: Number(msg.seq), status: msg.status });
+    }
     else if (msg.t === 'ping') host.send(cid, { t: 'pong', now: Date.now(), ts: msg.ts });
     else if (msg.t === 'leave') { screens.delete(cid); listeners.forEach((fn) => fn()); }
   }

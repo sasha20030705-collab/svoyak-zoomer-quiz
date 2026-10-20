@@ -603,3 +603,28 @@ body.idle { cursor: none; }
 #clip-unlock b { font-size: 1.6em; }
 #clip-unlock.on { opacity: 1; transform: translate(-50%, 0) rotate(-2deg); }
 .lowfx .vinyl { animation: none; }
+
+/* ---------- шоу победителя (js/winner.js): аватары прыгают под трек ---------- */
+.winner.choreo { isolation: isolate; }
+.winner.choreo .pcol .who, .winner.choreo .pcol .ava, .winner.choreo .others .chip { animation: none; }
+.winner.choreo .pcol .block { animation-delay: calc(var(--d) * .4); }
+.winner.choreo .pcol .ava { z-index: 3; will-change: translate, scale, rotate; }
+.winner.choreo .pcol.p1 .ava { z-index: 6; }
+.winner.choreo .others .chip { position: relative; z-index: 2; will-change: translate, scale, rotate; }
+.winner.choreo .pcol .crown { z-index: 7; }
+.winner.choreo.settled .pcol.p1 .ava { animation: wsway 2.6s ease-in-out infinite; animation-delay: calc(var(--i, 0) * -.4s); }
+@keyframes wsway { 0%, 100% { transform: translateY(0) rotate(-5deg); } 50% { transform: translateY(-14px) rotate(4deg); } }
+.wback, .wfx { position: absolute; inset: 0; pointer-events: none; }
+.wback { z-index: -1; }
+.wfx { z-index: 8; }
+.wpuff { position: absolute; border-radius: 50%; background: var(--white); border: 4px solid var(--black); opacity: 0; will-change: translate, scale, opacity; }
+.wflash { position: absolute; inset: -60px; background: radial-gradient(circle at 50% 70%, #fff 0, #fff 35%, rgba(255, 255, 255, .7) 70%); opacity: 0; }
+.wrays { position: absolute; width: 1700px; height: 1700px; margin: -850px 0 0 -850px; opacity: 0; will-change: scale, opacity;
+  -webkit-mask-image: radial-gradient(circle, #000 0, #000 22%, transparent 64%); mask-image: radial-gradient(circle, #000 0, #000 22%, transparent 64%); }
+.wrays i { position: absolute; inset: 0; border-radius: 50%; background: repeating-conic-gradient(var(--lime) 0 9deg, transparent 9deg 18deg, var(--pink) 18deg 27deg, transparent 27deg 36deg);
+  animation: wrays-spin 18s linear infinite; will-change: transform; }
+@keyframes wrays-spin { to { transform: rotate(360deg); } }
+.lowfx .wrays i { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .winner.choreo.settled .pcol.p1 .ava, .wrays i { animation: none !important; }
+}

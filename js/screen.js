@@ -682,22 +682,31 @@
         <div class="pcol p${g.place} ${n > 1 ? 'multi' : ''}" style="${teamVars(g.teams[0])};--d:${d}s;--n:${n}">
           <div class="who">
             ${g.place === 1 ? '<span class="crown emoji-font">👑</span>' : ''}
-            <div class="avas">${g.teams.map((t, i) => `<div class="ava emoji-font" style="${teamVars(t)};--i:${i}">${avaInner(t)}</div>`).join('')}</div>
-            <div class="nms">${g.teams.map((t) => `<span class="tag white nm">${esc(t.name)}</span>`).join('')}</div>
+            <div class="avas">${g.teams.map((t, i) => `<div class="ava emoji-font" data-tid="${esc(t.id)}" style="${teamVars(t)};--i:${i}">${avaInner(t)}</div>`).join('')}</div>
+            <div class="nms">${g.teams.map((t) => `<span class="tag white nm" data-tid="${esc(t.id)}">${esc(t.name)}</span>`).join('')}</div>
           </div>
           <div class="block" style="${stripes}"><span class="pn">${g.place}</span>${n > 1 ? '<span class="tie tag black">ничья</span>' : ''}<small>${fmt(g.score)}</small></div>
         </div>`;
     };
     const cols = [col(podium[1]), col(podium[0]), col(podium[2])].join('');
     const restHtml = rest.map((g) => g.teams.map((t) =>
-      `<span class="chip rest" style="${teamVars(t)}"><b class="pl">${g.place}</b><span class="e emoji-font">${avaInner(t)}</span><span class="cn">${esc(t.name)}</span><span class="cs">${fmt(t.score)}</span></span>`).join('')).join('');
+      `<span class="chip rest" data-tid="${esc(t.id)}" style="${teamVars(t)}"><b class="pl">${g.place}</b><span class="e emoji-font">${avaInner(t)}</span><span class="cn">${esc(t.name)}</span><span class="cs">${fmt(t.score)}</span></span>`).join('')).join('');
     const who = { 2: 'на двоих', 3: 'на троих', 4: 'на четверых', 5: 'на пятерых', 6: 'на шестерых', 7: 'на семерых', 8: 'на восьмерых' };
     const kicker = !champs.length ? 'корона достаётся…' : tie ? `корона делится ${who[champs.length] || 'на всех'}` : 'корона достаётся…';
     const title = !champs.length ? 'никому' : tie ? 'НИЧЬЯ!' : champs[0].name;
+    // шоу победителя (js/winner.js): старт — winnerShow.at по часам пульта, заголовок — на акцент трека
+    const WS = window.WinnerShow;
+    const reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    const showOf = (st) => st.winnerShow || null;
+    const elapsedOf = (st) => { const w = showOf(st); return w ? U.now() - w.at : 0; };
+    const titleHtml = (st) => {
+      const d0 = WS && champs.length ? Math.max(0, Math.round((reduced ? WS.TR.title : WS.T.title) * 1000 - elapsedOf(st))) : 500;
+      return letters(title, d0);
+    };
     const el = h(`
       <div class="view full winner ${rest.length ? 'has-rest' : ''} ${big ? 'crowd' : ''} ${tie ? 'tie' : ''}">
         <span class="tag lime kicker">${esc(kicker)}</span>
-        <h1 class="mega lime wiggle" style="--mega:${megaSize(title, 150, 1)}px">${letters(title, 500)}</h1>
+        <h1 class="mega lime wiggle" style="--mega:${megaSize(title, 150, 1)}px">${titleHtml(s)}</h1>
         <div class="podium-row">
           <div class="podium">${cols}</div>
           ${restHtml ? `<div class="others">${restHtml}</div>` : ''}
@@ -712,15 +721,53 @@
       if (clash()) el.classList.add('crowd');
       if (clash()) el.classList.add('crowd2');
     }
+    const colors = champs.length ? [...champs.map((t) => t.color), '#FFFFFF', '#C6FF00', '#FF2E93', '#2B4BFF', '#FF6A00'] : undefined;
+    let show = null, showSeq = null, resizeT = 0;
+    function classic() { // без модуля шоу (или команд нет) — как было: фанфары и конфетти
+      window.Sfx.play('fanfare');
+      setTimeout(() => confetti.cannons({ count: 160, colors }), 900);
+      setTimeout(() => confetti.rain(6000, { colors }), 1400);
+    }
+    function startShow(st, retitle) {
+      if (!show) return;
+      if (retitle) $('.mega', el).innerHTML = titleHtml(st);
+      show.start(elapsedOf(st));
+    }
+    function onResize() {
+      clearTimeout(resizeT);
+      resizeT = setTimeout(() => { if (!el.isConnected) { window.removeEventListener('resize', onResize); return; } fit(); startShow(Store.get(), false); }, 250);
+    }
     return {
       type: 'winner', el,
       mounted() {
         fit();
-        if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (el.isConnected) fit(); });
-        window.Sfx.play('fanfare');
-        const colors = champs.length ? [...champs.map((t) => t.color), '#FFFFFF', '#C6FF00', '#FF2E93', '#2B4BFF', '#FF6A00'] : undefined;
-        setTimeout(() => confetti.cannons({ count: 160, colors }), 900);
-        setTimeout(() => confetti.rain(6000, { colors }), 1400);
+        const st = Store.get();
+        if (WS && champs.length) {
+          try {
+            show = WS.create(el, {
+              places, reduced, confetti, colors,
+              origin: () => rectInStage(el),
+              // трек не играет (не загрузился, звук выключен) — фанфары на акцент
+              onDrop() { if (!winnerLoud(Store.get())) window.Sfx.play('fanfare'); },
+            });
+            showSeq = showOf(st) ? showOf(st).seq : null;
+            startShow(st, false);
+            window.addEventListener('resize', onResize);
+          } catch (e) { console.warn('winner show', e); show = null; }
+        }
+        if (!show) classic();
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => {
+          if (!el.isConnected) return;
+          const cls = () => el.classList.contains('crowd') + ':' + el.classList.contains('crowd2');
+          const before = cls();
+          fit();
+          if (show && cls() !== before) startShow(Store.get(), false); // раскладка сменилась — пересчитать прыжки
+        });
+      },
+      update(st) {
+        // «▶ повторить шоу победителя» на пульте
+        const w = showOf(st);
+        if (show && w && w.seq !== showSeq) { showSeq = w.seq; startShow(st, true); }
       },
     };
   }
@@ -1071,6 +1118,8 @@
     } else if (s.phase === 'final') {
       mode = 'final';
       if (s.final.stage === 'question' && started) inten = 1 - rem / total;
+    } else if (s.phase === 'winner') {
+      mode = winnerLoud(s) ? 'off' : 'final'; // трек победителя — фоновая музыка молчит; доиграл — плавно финальная
     }
     // играет отрывок трека — своя музыка уходит почти в ноль и возвращается после
     const ci = clipInfo(s);
@@ -1126,7 +1175,7 @@
   }
   function clipSync(s) {
     const ci = clipInfo(s);
-    if (!ci) { if (SC.player) SC.player.stop(); SC.mode = ''; clipUnlockShow(false); return; }
+    if (!ci) { if (SC.player) SC.player.stop(); SC.mode = ''; clipUnlockShow(!!(WM.player && WM.mode && WM.player.status === 'blocked')); return; }
     if (!SC.player) {
       SC.player = window.ClipPlayer({
         context: () => (window.Sfx.unlocked() ? window.Sfx.context() : null),
@@ -1151,7 +1200,101 @@
     SC.player.sync(ci.a, start, true);
     clipUnlockShow(SC.player.status === 'blocked');
   }
-  function clipKick() { if (SC.player) SC.player.kick(); }
+  function clipKick() {
+    if (SC.player) SC.player.kick();
+    if (WM.player && WM.mode && WM.player.status === 'blocked') WM.player.kick(); // трек победителя: только если автоплей не пустил
+  }
+
+  /* ---------- трек победителя: BIA & A$AP Ferg — «WE ON GO II» (feat. Denzel Curry) ----------
+     Состояние — winnerShow.music в Store (как current.audio у отрывков). Свой файл ведущего
+     (слот «Победитель» в карточке «Музыка», IndexedDB 'winner') важнее превью Apple; экран по
+     сети его не видит — тогда играет пульт. Превью грузится заранее, ещё в финале. */
+  const WINNER_SRC = 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/2e/b4/af/2eb4af41-6069-4d48-acc8-b76bf420fe35/mzaf_11448656375930640854.plus.aac.p.m4a';
+  const WM = { player: null, mode: '', own: null, sent: '', fixSeq: -1, fixes: 0, errSeq: null };
+  function winnerInfo(s) {
+    if (s.phase !== 'winner' || !s.winnerShow || !s.winnerShow.music) return null;
+    return { m: s.winnerShow.music, own: (s.music && s.music.files && s.music.files.winner) || null };
+  }
+  /** Трек победителя звучит, вот-вот начнётся или стоит на паузе у ведущего — фоновую музыку не играем.
+      Доиграл или не загрузился — дальше играет финальная. */
+  function winnerLoud(s) {
+    const wi = winnerInfo(s);
+    if (!wi) return false;
+    const ph = U.clipPhase(wi.m);
+    if (ph !== 'play' && ph !== 'wait' && ph !== 'pause') return false;
+    if (wi.m.status === 'ended' || wi.m.status === 'error') return false;
+    const st = WM.player && WM.player.status;
+    if ((WM.mode === 'preview' || WM.mode === 'own') && (st === 'error' || st === 'ended')) return false;
+    return true;
+  }
+  function winnerStatus(st) {
+    const wi = winnerInfo(Store.get());
+    if (!wi) return;
+    const sig = wi.m.seq + ':' + st;
+    if (sig === WM.sent) return;
+    WM.sent = sig;
+    if (st === 'ok' && !wi.m.status) return;
+    Store.dispatch({ type: 'winnerStatus', status: st, seq: wi.m.seq });
+  }
+  function winnerPlayer() {
+    if (!WM.player && window.ClipPlayer) {
+      // без анализатора: обычный <audio>, полная громкость (громко!), глушится только кнопкой «звук на экране»
+      WM.player = window.ClipPlayer({ context: () => null, muted: () => window.Sfx.isMuted(), onStatus: winnerStatus });
+    }
+    return WM.player;
+  }
+  function winnerSync(s) {
+    const wi = winnerInfo(s);
+    if (!wi) {
+      if (WM.player) WM.player.stop();
+      WM.mode = '';
+      // финал — превью заранее в кэш (свой файл и так локальный)
+      if (s.phase === 'final' && !(s.music && s.music.files && s.music.files.winner) && winnerPlayer()) WM.player.load(WINNER_SRC, { cors: false });
+      return;
+    }
+    const p = winnerPlayer();
+    if (!p) return;
+    let src = WINNER_SRC, mode = 'preview';
+    if (wi.own) {
+      if (netMode) mode = 'host';
+      else {
+        const o = WM.own;
+        if (!o || o.at !== wi.own.at) {
+          if (o && o.url) URL.revokeObjectURL(o.url);
+          const mine = WM.own = { at: wi.own.at, loading: true, url: null };
+          mode = 'loading';
+          if (window.MediaDB) window.MediaDB.get('winner').then((rec) => {
+            mine.loading = false;
+            if (rec && rec.data) mine.url = URL.createObjectURL(new Blob([rec.data], { type: rec.type || 'audio/mpeg' }));
+          });
+          else mine.loading = false;
+        } else if (o.loading) mode = 'loading';
+        else if (o.url) { mode = 'own'; src = o.url; }
+        // файла в IndexedDB нет (другой браузер) — остаётся превью
+      }
+    }
+    WM.mode = mode;
+    if (mode === 'host' || mode === 'loading') { p.stop(); return; }
+    p.load(src, { cors: false });
+    // не загрузился — не долбим play(): играет финальная музыка, на пульте плашка (повтор — «повторить шоу»/▶)
+    // одна повторная попытка на каждую команду (старт шоу, ▶, «повторить»): сбой предзагрузки в финале не приговор
+    if (p.status === 'error') {
+      if (WM.errSeq !== wi.m.seq) { WM.errSeq = wi.m.seq; p.unload(); p.load(src, { cors: false }); }
+      else { p.stop(); return; }
+    }
+    p.sync(wi.m, 0, true);
+    // догоняем хореографию: трек стартовал позже (загрузка) или экран открыли посреди шоу
+    const a = p.el;
+    if (WM.fixSeq !== wi.m.seq) { WM.fixSeq = wi.m.seq; WM.fixes = 0; }
+    if (a && !a.paused && !a.seeking && a.readyState >= 2 && wi.m.playing && WM.fixes < 4) {
+      const exp = U.clipPos(wi.m);
+      if (Math.abs(a.currentTime - exp) > 0.35) {
+        WM.fixes++;
+        try { a.currentTime = isFinite(a.duration) ? Math.min(exp, a.duration) : exp; } catch (e) { /* ignore */ }
+      }
+    }
+  }
+  setInterval(() => { if (quiz) winnerSync(Store.get()); }, 200);
   // не только по кадрам: в фоновой вкладке requestAnimationFrame спит, а пауза/стоп по dur нужны всегда
   setInterval(() => { if (quiz) clipSync(Store.get()); }, 200);
   Store.subscribe((s) => { if (quiz) clipSync(s); }); // пауза по баззеру — сразу, без ожидания кадра
@@ -1174,6 +1317,7 @@
     const s = Store.get();
     countdown(s);
     clipSync(s);
+    winnerSync(s);
     musicTick(s);
     if (view && view.tick && view.el.isConnected) view.tick(s);
     timerSounds(s);
@@ -1305,6 +1449,7 @@
     Store.useRemote((a) => {
       // отчёт плеера отрывка (автоплей заблокирован, превью не грузится) — пульту
       if (a && a.type === 'audioStatus') { client.send({ t: 'audioStatus', key: a.key, status: a.status }); return; }
+      if (a && a.type === 'winnerStatus') { client.send({ t: 'winnerStatus', seq: a.seq, status: a.status }); return; }
       if (!a || a.type !== 'buzz') return;
       const st = Store.get();
       client.send({ t: 'kbBuzz', teamId: a.teamId, qid: st.phase === 'question' && st.current ? st.current.key : null });
@@ -1348,5 +1493,5 @@
     requestAnimationFrame(frame);
   });
 
-  window.__screen = { get view() { return view; }, confetti, get clip() { return SC; }, get preloadedClips() { return preloadedClips; } };
+  window.__screen = { get view() { return view; }, confetti, get clip() { return SC; }, get winnerMusic() { return WM; }, get preloadedClips() { return preloadedClips; } };
 })();

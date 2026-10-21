@@ -242,7 +242,9 @@
     const ci = clipInfo(s);
     const a = cur.audio;
     const au = (q.media && q.media.audio) || {};
-    const plaque = a.status === 'error' && !ci.own
+    const plaque = !au.src && !ci.own
+      ? '<div class="clip-warn">📁 У этого трека нет превью — загрузи свой отрывок кнопкой ниже, иначе играть нечему.</div>'
+      : a.status === 'error' && !ci.own
       ? '<div class="clip-warn">⚠️ Превью не загрузилось — загрузи свой файл или играй с телефона.</div>'
       : a.status === 'blocked' && !ci.hostPlays
         ? '<div class="clip-warn">🔇 Экран не пускает звук: кликни по экрану гостей, чтобы включить звук.</div>'

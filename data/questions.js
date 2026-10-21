@@ -363,14 +363,14 @@ window.QUIZ = {
               value: 600,
               type: "audio",
               special: null,
-              prompt: "Чей это трек и как он называется?",
+              prompt: "Чей это трек и как он называется? Тут двое.",
               media: {
-                audio: { src: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/8d/f9/97/8df99783-dfa2-d839-12d4-3ef0347701b3/mzaf_7629191323839660110.plus.aac.p.m4a", start: 0, dur: 16 },
-                cover: "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/86/20/21/862021e1-9d17-7484-8236-8b72eb446755/0.jpg/600x600bb.jpg",
+                audio: { src: "", start: 0, dur: 16 },
+                cover: "",
                 hideCover: true
               },
-              answer: "NILETTO — «Любимка» (нужны исполнитель И название)",
-              note: "Тот самый трек, под который в 2020-м танцевал весь TikTok."
+              answer: "VILLIAN & madk1d — «Династия» (засчитываем хотя бы одного исполнителя И название)",
+              note: "Свой отрывок: загружается на пульте кнопкой «загрузить свой отрывок»."
             },
             {
               value: 800,
@@ -389,14 +389,14 @@ window.QUIZ = {
               value: 1000,
               type: "audio",
               special: null,
-              prompt: "Самый короткий отрывок. Кто поёт и как называется трек?",
+              prompt: "Самый короткий отрывок. Кто читает и как называется трек?",
               media: {
-                audio: { src: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/c7/3e/53/c73e53c1-021e-ca90-0cc5-d7883dd11b45/mzaf_18382729877648664933.plus.aac.p.m4a", start: 15, dur: 8 },
-                cover: "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/9e/9b/11/9e9b1128-7c00-23b9-d48f-da889b54fdb3/cover.jpg/600x600bb.jpg",
+                audio: { src: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/75/59/aa/7559aafc-6fbc-3aad-72df-5ee12bd12ab5/mzaf_1545159619189770896.plus.aac.p.m4a", start: 0, dur: 10 },
+                cover: "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/2e/63/0f/2e630f76-f669-dfdf-6979-f8b8a157ebd1/0.jpg/600x600bb.jpg",
                 hideCover: true
               },
-              answer: "Dabro — «Юность» (нужны исполнитель И название)",
-              note: "Dabro — это братья Иван и Михаил Засидкевичи из Казани. «Юность» (2020) стала их главным хитом."
+              answer: "ЛСП — «Шиншиллы» (нужны исполнитель И название)",
+              note: "ЛСП — это Олег Савченко из Минска."
             }
           ]
         },

@@ -365,12 +365,12 @@ window.QUIZ = {
               special: null,
               prompt: "Чей это трек и как он называется? Тут двое.",
               media: {
-                audio: { src: "", start: 0, dur: 16 },
-                cover: "",
+                audio: { src: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/52/91/bf/5291bfb8-78b5-a5fa-e5a6-78bdae6e8c2d/mzaf_6922731614440323813.plus.aac.p.m4a", start: 8, dur: 14 },
+                cover: "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/1c/7a/1a/1c7a1a7c-aecc-5668-d066-3b1aa7bc7896/cover.jpg/600x600bb.jpg",
                 hideCover: true
               },
-              answer: "VILLIAN & madk1d — «Династия» (засчитываем хотя бы одного исполнителя И название)",
-              note: "Свой отрывок: загружается на пульте кнопкой «загрузить свой отрывок»."
+              answer: "Heronwater & DooMee — «Хай хилс» (засчитываем хотя бы одного исполнителя И название)",
+              note: "Трек 2024 года, который разлетелся по TikTok."
             },
             {
               value: 800,
